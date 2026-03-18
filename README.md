@@ -1,4 +1,4 @@
-# Lemma Greek Dictionary for Kindle
+# Lemma Modern Greek Dictionary for Kindle
 
 A comprehensive Greek dictionary generator for Kindle e-readers, supporting both Greek-English and Greek-Greek (monolingual) dictionaries. This tool processes Wiktionary data to create `.mobi` dictionary files optimized for Kindle devices.
 
