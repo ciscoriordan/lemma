@@ -105,7 +105,7 @@ class GreekDictionaryGenerator:
                 continue
 
             volume_count += 1
-            print(f"\n=== Volume: {group_label} ({len(group_entries)} entries) ===")
+            print(f"\n=== Volume: {group_name} ({len(group_entries)} entries) ===")
 
             self.entries = group_entries
             self.output_dir = f"{base_output_dir}_{group_name}"
