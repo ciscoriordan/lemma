@@ -13,7 +13,7 @@ import time
 from lib.frequency_ranker import FrequencyRanker
 
 
-MAX_INFLECTIONS = 10
+MAX_INFLECTIONS = 30
 
 ACCENT_FROM = 'άέήίόύώΐΰϊϋΆΈΉΊΌΎΏ'
 ACCENT_TO   = 'αεηιουωιυιυαεηιουω'

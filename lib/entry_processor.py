@@ -405,21 +405,6 @@ class EntryProcessor:
                     expanded_forms = expand_declension(word, pattern_name)
                     template_inflections.update(expanded_forms)
 
-        # Process related words last
-        if entry.get("related"):
-            for related in entry["related"]:
-                related_word = related.get("word") if isinstance(related, dict) else None
-                if related_word and related_word != word and ' ' not in related_word:
-                    expanded_forms = self._expand_parentheses(related_word)
-                    for expanded in expanded_forms:
-                        add_inflection(expanded)
-                        capitalized = expanded[0].upper() + expanded[1:] if expanded else expanded
-                        if capitalized != expanded:
-                            add_inflection(capitalized)
-                        lowered = expanded.lower()
-                        if lowered != expanded:
-                            add_inflection(lowered)
-
         # Combine: explicit forms first, then template-generated forms
         template_only = template_inflections - inflection_set
         return inflections + list(template_only)
