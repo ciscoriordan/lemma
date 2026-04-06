@@ -157,7 +157,9 @@ The dictionaries include:
 
 ### Inflection Limit
 
-Each headword includes up to 30 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`), plus their case variants (Capitalized and UPPER forms for Kindle lookup matching). When pre-ranked forms from Dilemma are available, these 30 slots are filled with case-deduplicated forms in corpus frequency order, so no slots are wasted on duplicates like φας/Φας. Without pre-ranked forms, a local FrequencyRanker handles ranking. Testing against a real Greek ebook showed that 30 unique inflections per headword covers ~95% of inflected form lookups. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
+Each headword includes up to 30 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`). When pre-ranked forms from Dilemma are available, these 30 slots are filled with case-deduplicated forms in corpus frequency order. Without pre-ranked forms, a local FrequencyRanker handles ranking. Testing against a real Greek ebook showed that 30 unique inflections per headword covers ~95% of inflected form lookups. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
+
+Note: *kindlegen* has an undocumented limit of 255 inflection rules per entry. Since [kindling](https://github.com/ciscoriordan/kindling) uses orth-index-only encoding (no inflection INDX), this limit does not apply. The 30-form cap is a practical choice for file size and lookup performance, not a format constraint. Use `-i N` to adjust.
 
 ### Excluded Content
 
