@@ -272,13 +272,7 @@ class HtmlGenerator:
         else:
             capped_forms = self._rank_inflections(single_word_inflections)[:max_inflections]
 
-        # When using pre-ranked forms, add case variants AFTER capping so they
-        # don't eat cap slots. Each selected form gets Capitalized and UPPER
-        # variants added as extra idx:iform entries for Kindle lookup matching.
-        if self._use_ranked_forms:
-            all_variations = self._add_case_variants_after_cap(capped_forms)
-        else:
-            all_variations = capped_forms
+        all_variations = capped_forms
 
         escaped_word = _escape_html(word)
         io.write(f"""\
