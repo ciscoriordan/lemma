@@ -46,6 +46,7 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 
 - **Bilingual & Monolingual Support**: Generate Greek-English or Greek-Greek dictionaries
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/fcsriordan/dilemma) when available
+- **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
 - **Frequency-Ranked Inflections**: Prioritizes the most commonly encountered inflected forms using corpus frequency data from [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018)
 - **Etymology Information**: Includes word origins where available (English dictionary only)
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
@@ -95,6 +96,7 @@ python3 greek_kindle_dictionary.py -s el -l 5 -m
 - `-s, --source LANG`: Source Wiktionary language ('en' for English or 'el' for Greek)
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
 - `-m, --mobi`: Also generate `.mobi` via Kindle Previewer (for sideload testing)
+- `-i, --inflections N`: Max inflections per headword (default: 30)
 - `-h, --help`: Show help message
 
 ## Data Sources
@@ -115,7 +117,17 @@ KAIKKI_LOCAL_DIR=/path/to/kaikki/dumps
 DILEMMA_DATA_DIR=/path/to/dilemma/data
 ```
 
-When `DILEMMA_DATA_DIR` is set and `mg_lookup.json` is found, the generator will supplement kaikki-derived inflections with Dilemma's more comprehensive mappings. Without it, inflections are extracted from kaikki data only.
+When `DILEMMA_DATA_DIR` is set and `mg_lookup_scored.json` (or `mg_lookup.json`) is found, the generator will supplement kaikki-derived inflections with Dilemma's more comprehensive mappings. Without it, inflections are extracted from kaikki data only.
+
+#### Lemma Equivalences
+
+Wiktionary and Dilemma sometimes disagree on the canonical lemma for a word (e.g., Wiktionary uses `τρώω` for "eat" while Dilemma files all 165 inflections under `τρώγω`). To bridge this, run:
+
+```bash
+python3 generate_mg_equivalences.py
+```
+
+This cross-references the two data sources, uses corpus frequency as a tiebreaker, and writes `data/mg_lemma_equivalences.json`. The dictionary generator loads this automatically. Without it, inflections filed under a different canonical form in Dilemma will be missed.
 
 ### Related Projects
 

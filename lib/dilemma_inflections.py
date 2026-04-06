@@ -15,22 +15,95 @@ class DilemmaInflections:
     def __init__(self):
         self.lemma_to_forms = {}
         self._form_confidence = {}
+        self._form_to_lemma = {}
+        self._equivalences = {}  # variant -> canonical
+        self._reverse_equivalences = {}  # canonical -> [variants]
         self._load_data()
+        self._load_equivalences()
 
     def available(self):
         return len(self.lemma_to_forms) > 0
 
     def get_inflections(self, lemma):
-        return self.lemma_to_forms.get(lemma, [])
+        """Return inflections for a lemma, including equivalent lemma forms."""
+        # Direct match
+        forms = list(self.lemma_to_forms.get(lemma, []))
+
+        # Collect forms from equivalent lemmas
+        equiv_lemmas = self._get_equivalent_lemmas(lemma)
+        for eq_lemma in equiv_lemmas:
+            if eq_lemma != lemma:
+                eq_forms = self.lemma_to_forms.get(eq_lemma, [])
+                forms.extend(eq_forms)
+                if eq_lemma not in forms:
+                    forms.append(eq_lemma)
+
+        # Fallback: if still empty and lemma is a known form, use its dilemma lemma's forms
+        if not forms:
+            dilemma_lemma = self._form_to_lemma.get(lemma)
+            if dilemma_lemma:
+                forms = list(self.lemma_to_forms.get(dilemma_lemma, []))
+
+        # Deduplicate while preserving order
+        seen = set()
+        deduped = []
+        for f in forms:
+            if f not in seen:
+                seen.add(f)
+                deduped.append(f)
+        return deduped
+
+    def get_all_lemmas(self, word):
+        """Return all compatible headwords for a given form.
+
+        Given a form, finds its dilemma lemma, finds all equivalents
+        of that lemma, and returns all of them.
+        """
+        lemma = self._form_to_lemma.get(word)
+        if not lemma:
+            return []
+        return self._get_equivalent_lemmas(lemma)
+
+    def _get_equivalent_lemmas(self, lemma):
+        """Return all equivalent lemma forms for a given lemma."""
+        canonical = self._equivalences.get(lemma, lemma)
+        result = [canonical]
+        variants = self._reverse_equivalences.get(canonical, [])
+        for v in variants:
+            if v != canonical:
+                result.append(v)
+        if lemma not in result:
+            result.append(lemma)
+        return result
 
     def confidence_for(self, form):
         """Return the confidence tier (1-5) for a form, or 0 if unknown."""
         return self._form_confidence.get(form, 0)
 
     def free_inflection_table(self):
-        """Free lemma_to_forms after enhancement phase. Keeps _form_confidence for ranking."""
+        """Free lemma_to_forms and _form_to_lemma after enhancement phase. Keeps _form_confidence for ranking."""
         self.lemma_to_forms.clear()
+        self._form_to_lemma.clear()
         gc.collect()
+
+    def _load_equivalences(self):
+        """Load MG lemma equivalences from data/mg_lemma_equivalences.json."""
+        equiv_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'data', 'mg_lemma_equivalences.json'
+        )
+        if not os.path.exists(equiv_path):
+            return
+
+        start = time.time()
+        with open(equiv_path, 'r', encoding='utf-8') as f:
+            self._equivalences = json.load(f)
+        elapsed = time.time() - start
+
+        for variant, canonical in self._equivalences.items():
+            self._reverse_equivalences.setdefault(canonical, []).append(variant)
+
+        print(f"Loaded {len(self._equivalences)} lemma equivalences in {elapsed:.1f}s")
 
     def _load_data(self):
         data_dir = self._find_data_dir()
@@ -62,7 +135,10 @@ class DilemmaInflections:
                 continue
             lemma = info.get('lemma')
             confidence = info.get('confidence', 0)
-            if not lemma or form == lemma:
+            if not lemma:
+                continue
+            self._form_to_lemma[form] = lemma
+            if form == lemma:
                 continue
             if ' ' in form:
                 continue
@@ -94,6 +170,7 @@ class DilemmaInflections:
 
         # Invert: form->lemma becomes lemma->forms
         for form, lemma in data.items():
+            self._form_to_lemma[form] = lemma
             if form == lemma:
                 continue
             if ' ' in form:
