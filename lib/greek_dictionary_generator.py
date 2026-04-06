@@ -17,15 +17,17 @@ from lib.mobi_generator import MobiGenerator
 
 
 class GreekDictionaryGenerator:
-    def __init__(self, source_lang='en', limit_percent=None, generate_mobi=False, max_inflections=None):
+    def __init__(self, source_lang='en', limit_percent=None, generate_mobi=False,
+                 max_inflections=None, enable_links=False, enable_etymology=False):
         if source_lang not in ('en', 'el'):
             raise ValueError("Source language must be 'en' or 'el'")
         self.source_lang = source_lang
         self.limit_percent = limit_percent
         self.generate_mobi = generate_mobi
         self.max_inflections = max_inflections
+        self.enable_links = enable_links
+        self.enable_etymology = enable_etymology
         self.entries = {}
-        self.lemma_inflections = {}
         self.extraction_date = None
         self.download_date = time.strftime("%Y%m%d")
         self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}"
@@ -55,9 +57,8 @@ class GreekDictionaryGenerator:
         self._generate_epub()
 
         if self.generate_mobi:
-            # Free all data before kindlegen - it only needs the files on disk
+            # Free all data before MOBI generation - it only needs the files on disk
             self.entries.clear()
-            self.lemma_inflections.clear()
             self.dilemma_inflections = None
             gc.collect()
             self._generate_mobi()

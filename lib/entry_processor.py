@@ -9,7 +9,6 @@ import gc
 import json
 import re
 from lib.greek_declension_templates import is_declension_template, expand_declension
-from lib.dilemma_inflections import DilemmaInflections
 
 
 SKIP_POS_KEYWORDS = frozenset([
@@ -39,8 +38,6 @@ class EntryProcessor:
     def __init__(self, generator):
         self.generator = generator
         self.entries = generator.entries
-        self.lemma_inflections = generator.lemma_inflections
-        self.form_of_entries = {}  # Track which entries are just form-of redirects
 
     def process(self):
         print("Processing entries...")
@@ -141,12 +138,6 @@ class EntryProcessor:
         if dilemma:
             dilemma.free_inflection_table()
 
-        # Count and merge inflections
-        self._merge_inflections()
-
-        # Free intermediate structures no longer needed
-        self.form_of_entries.clear()
-        self.generator.lemma_inflections.clear()
         gc.collect()
 
         # Add case variations for all entries
@@ -182,46 +173,21 @@ class EntryProcessor:
     def _process_single_entry(self, entry, word, pos):
         # Build definition from senses
         definitions = []
+        form_of_targets = []
         expanded_from_template = False
 
-        # Check if this entry has form_of at the entry level
         senses = entry.get("senses")
-        if senses and isinstance(senses, list) and senses:
-            # Check if ALL senses are form_of
-            all_form_of = all(
-                isinstance(sense.get("form_of"), list) and sense["form_of"]
-                for sense in senses
-            )
 
-            if all_form_of:
-                # This is a pure form-of entry
-                self.form_of_entries[word] = True
-
-                # Add to lemma inflections for each form_of target
-                for sense in senses:
-                    form_of_list = sense.get("form_of")
-                    if isinstance(form_of_list, list):
-                        for form_of_data in form_of_list:
-                            if isinstance(form_of_data, dict) and form_of_data.get("word"):
-                                form_of_word = form_of_data["word"]
-                                # Skip multi-word lemmas
-                                if ' ' in form_of_word:
-                                    continue
-
-                                if form_of_word not in self.lemma_inflections:
-                                    self.lemma_inflections[form_of_word] = set()
-                                self.lemma_inflections[form_of_word].add(word)
-
-                                # Also add case variations of this inflection
-                                capitalized = word[0].upper() + word[1:] if word else word
-                                if capitalized != word:
-                                    self.lemma_inflections[form_of_word].add(capitalized)
-                                lowered = word.lower()
-                                if lowered != word:
-                                    self.lemma_inflections[form_of_word].add(lowered)
-
-                # Don't create a separate entry for pure form-of entries
-                return
+        # Collect form_of targets for cross-referencing
+        if senses and isinstance(senses, list):
+            for sense in senses:
+                form_of_list = sense.get("form_of")
+                if isinstance(form_of_list, list):
+                    for form_of_data in form_of_list:
+                        if isinstance(form_of_data, dict) and form_of_data.get("word"):
+                            target = form_of_data["word"]
+                            if ' ' not in target and target not in form_of_targets:
+                                form_of_targets.append(target)
 
         # Process definitions from senses
         if senses:
@@ -281,6 +247,12 @@ class EntryProcessor:
                 existing_entry['etymology'] = entry.get("etymology_text")
             if not existing_entry.get('expanded_from_template'):
                 existing_entry['expanded_from_template'] = expanded_from_template
+            # Merge form_of targets
+            existing_targets = existing_entry.get('form_of_targets') or []
+            for t in form_of_targets:
+                if t not in existing_targets:
+                    existing_targets.append(t)
+            existing_entry['form_of_targets'] = existing_targets
         else:
             self.entries[word].append({
                 'pos': pos,
@@ -288,6 +260,7 @@ class EntryProcessor:
                 'etymology': entry.get("etymology_text"),
                 'inflections': inflections,
                 'expanded_from_template': expanded_from_template,
+                'form_of_targets': form_of_targets,
             })
 
     def _extract_definition_from_sense(self, sense):
@@ -443,58 +416,6 @@ class EntryProcessor:
 
         if enhanced_count > 0:
             print(f"Added {enhanced_count} inflections from dilemma")
-
-    def _merge_inflections(self):
-        if not self.lemma_inflections:
-            return
-
-        # First, filter out any "inflections" that are actually separate true headwords
-        filtered_inflections = {}
-
-        for lemma, inflected_forms in self.lemma_inflections.items():
-            # Skip if lemma contains spaces (multi-word)
-            if ' ' in lemma:
-                continue
-
-            # Convert Set to list for filtering
-            forms_list = list(inflected_forms) if isinstance(inflected_forms, set) else inflected_forms
-
-            # Only keep inflected forms that are either:
-            # 1. Not in entries at all (pure inflections)
-            # 2. In form_of_entries (form-of redirects like έπαψε)
-            filtered_forms = []
-            for form in forms_list:
-                # Skip if it's a prefix/suffix
-                if form.startswith('-') or form.endswith('-'):
-                    continue
-                # Skip multi-word forms
-                if ' ' in form:
-                    continue
-                # Keep if it's not in entries at all (pure inflection)
-                # Keep if it's a form-of entry (redirect)
-                # Reject if it's a true headword
-                if form in self.entries and form not in self.form_of_entries:
-                    continue
-                filtered_forms.append(form)
-
-            if filtered_forms:
-                filtered_inflections[lemma] = filtered_forms
-
-        # Now merge the filtered inflections
-        for lemma, inflected_forms in filtered_inflections.items():
-            if lemma in self.entries:
-                for entry in self.entries[lemma]:
-                    if entry.get('inflections') is None:
-                        entry['inflections'] = []
-                    existing = set(entry['inflections'])
-                    for form in inflected_forms:
-                        if form not in existing:
-                            entry['inflections'].append(form)
-                            existing.add(form)
-
-        total_forms = sum(len(forms) for forms in filtered_inflections.values())
-        print(f"Added {len(filtered_inflections)} additional inflection mappings from form_of entries")
-        print(f"Total inflections: {total_forms}")
 
     def _add_case_variations(self):
         for word, entries in self.entries.items():

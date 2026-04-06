@@ -1,6 +1,6 @@
 # Lemma Modern Greek Dictionary for Kindle
 
-A comprehensive Greek dictionary generator for Kindle e-readers, supporting both Greek-English and Greek-Greek (monolingual) dictionaries. This tool processes Wiktionary data to create `.epub` dictionary files for KDP upload, with optional `.mobi` output for sideload testing.
+A comprehensive Greek dictionary generator for Kindle e-readers, supporting both Greek-English and Greek-Greek (monolingual) dictionaries. This tool processes Wiktionary data to create `.mobi` dictionary files for sideloading onto Kindle devices.
 
 ![krybontas](https://github.com/user-attachments/assets/b4720bd2-b3d6-4bbc-9295-5e0944cd0393)
 
@@ -34,13 +34,11 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 
 ### Greek-English Dictionary
 
-- `lemma_greek_en_[date].epub` - EPUB for KDP upload
-- `lemma_greek_en_[date].mobi` - MOBI for sideload testing (generated with `-m` flag)
+- `lemma_greek_en_[date].mobi` - MOBI for sideloading (generated with `-m` flag)
 
 ### Greek-Greek (Monolingual) Dictionary
 
-- `lemma_greek_el_[date].epub` - EPUB for KDP upload
-- `lemma_greek_el_[date].mobi` - MOBI for sideload testing (generated with `-m` flag)
+- `lemma_greek_el_[date].mobi` - MOBI for sideloading (generated with `-m` flag)
 
 ## Features
 
@@ -48,7 +46,8 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/fcsriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
 - **Pre-Ranked Inflections**: When [Dilemma](https://github.com/fcsriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
-- **Etymology Information**: Includes word origins where available (English dictionary only)
+- **Cross-References**: Entries that are forms of other headwords include "see also" references, optionally as clickable links (`--links`)
+- **Etymology Information**: Includes word origins where available (English dictionary, enabled with `--etymology`)
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
 
@@ -57,7 +56,7 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 ### Prerequisites
 
 - Python 3.8+
-- Kindle Previewer 3 (optional, only needed for `.mobi` generation with `-m` flag)
+- [kindling](https://pypi.org/project/kindling/) (optional, only needed for `.mobi` generation with `-m` flag): `pip install kindling`
 - Works on macOS, Linux, and Windows
 
 ### Installation
@@ -81,22 +80,30 @@ python3 greek_kindle_dictionary.py
 # Generate Greek-Greek monolingual dictionary
 python3 greek_kindle_dictionary.py -s el
 
-# Also generate .mobi for sideload testing
+# Also generate .mobi for sideloading
 python3 greek_kindle_dictionary.py -m
 
 # Generate a test dictionary with only 10% of entries
 python3 greek_kindle_dictionary.py -l 10
 
+# Enable clickable cross-references between entries
+python3 greek_kindle_dictionary.py --links
+
+# Include etymology information (English dictionary)
+python3 greek_kindle_dictionary.py --etymology
+
 # Combine options
-python3 greek_kindle_dictionary.py -s el -l 5 -m
+python3 greek_kindle_dictionary.py -s el -l 5 -m --links
 ```
 
 ### Command Line Arguments
 
 - `-s, --source LANG`: Source Wiktionary language ('en' for English or 'el' for Greek)
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
-- `-m, --mobi`: Also generate `.mobi` via Kindle Previewer (for sideload testing)
+- `-m, --mobi`: Also generate `.mobi` via kindling (for sideloading)
 - `-i, --inflections N`: Max inflections per headword (default: 30)
+- `--links`: Enable clickable cross-references between entries (default: off)
+- `--etymology`: Include etymology information in entries (default: off)
 - `-h, --help`: Show help message
 
 ## Data Sources
@@ -176,7 +183,7 @@ The following are filtered out as they cannot be selected in Kindle texts:
 
 ### Building Issues
 
-- **Kindle Previewer not found**: Only needed for `.mobi` generation (`-m` flag). Install from [Amazon's website](https://www.amazon.com/gp/feature.html?docId=1000765261)
+- **kindling not found**: Only needed for `.mobi` generation (`-m` flag). Install with `pip install kindling`
 - **Download freezes**: Use pre-downloaded data files from the repository
 - **Memory issues**: Use the `-l` option to build smaller test dictionaries first
 

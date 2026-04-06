@@ -291,6 +291,15 @@ class HtmlGenerator:
         io.write("    </idx:orth>\n")
         io.write("  </idx:short>\n")
 
+        # Collect all form_of targets across entries for this word
+        all_form_of_targets = []
+        form_of_seen = set()
+        for e in entries:
+            for t in (e.get('form_of_targets') or []):
+                if t not in form_of_seen and t != word:
+                    form_of_seen.add(t)
+                    all_form_of_targets.append(t)
+
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
             # Combine all definitions by POS
@@ -342,11 +351,19 @@ class HtmlGenerator:
                         io.write(f"  <p class='def'>{_escape_html(definition)}</p>\n")
 
                 etym = entry.get('etymology')
-                if etym and etym.strip() and self.generator.source_lang == 'en':
+                if etym and etym.strip() and self.generator.enable_etymology:
                     io.write(f"  <p class='etym'>[Etymology: {_escape_html(etym)}]</p>\n")
 
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <hr />\n")
+
+        # Add cross-references for form_of targets that are headwords
+        for target in all_form_of_targets:
+            if target in self.entries:
+                if self.generator.enable_links:
+                    io.write(f"  <p class='def'><i>see also</i> <a href=\"lookup:{_escape_html(target)}\">{_escape_html(target)}</a></p>\n")
+                else:
+                    io.write(f"  <p class='def'><i>see also</i> {_escape_html(target)}</p>\n")
 
         io.write("""\
 </idx:entry>

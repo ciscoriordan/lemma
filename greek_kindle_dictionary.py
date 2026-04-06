@@ -13,7 +13,7 @@ from lib.greek_dictionary_generator import GreekDictionaryGenerator
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Lemma - Greek Dictionary Generator. Produces EPUB by default, with optional MOBI for sideload testing.",
+        description="Lemma - Greek Dictionary Generator. Produces EPUB and optional MOBI for sideloading.",
         usage="python3 greek_kindle_dictionary.py [options]",
     )
 
@@ -42,7 +42,21 @@ def main():
         "-m", "--mobi",
         action="store_true",
         default=False,
-        help="Also generate .mobi via Kindle Previewer (for sideload testing)",
+        help="Also generate .mobi via kindling (for sideloading)",
+    )
+
+    parser.add_argument(
+        "--links",
+        action="store_true",
+        default=False,
+        help="Enable clickable cross-references between entries (default: off)",
+    )
+
+    parser.add_argument(
+        "--etymology",
+        action="store_true",
+        default=False,
+        help="Include etymology information in entries (default: off)",
     )
 
     args = parser.parse_args()
@@ -56,6 +70,8 @@ def main():
         args.source, args.limit,
         generate_mobi=args.mobi,
         max_inflections=args.inflections,
+        enable_links=args.links,
+        enable_etymology=args.etymology,
     )
     generator.generate()
 
