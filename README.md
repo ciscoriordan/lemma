@@ -47,7 +47,7 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 - **Bilingual & Monolingual Support**: Generate Greek-English or Greek-Greek dictionaries
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/fcsriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
-- **Frequency-Ranked Inflections**: Prioritizes the most commonly encountered inflected forms using corpus frequency data from [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018)
+- **Pre-Ranked Inflections**: When [Dilemma](https://github.com/fcsriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
 - **Etymology Information**: Includes word origins where available (English dictionary only)
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
@@ -105,7 +105,8 @@ The dictionaries are built from:
 
 - **Primary Source**: [Kaikki.org](https://kaikki.org/) - Machine-readable Wiktionary data (definitions, POS, etymology)
 - **Inflection Data** (optional): [Dilemma](https://github.com/fcsriordan/dilemma) - Greek lemmatizer with 2.76M Modern Greek form-to-lemma mappings compiled from English and Greek Wiktionary, treebank corpora, and LSJ expansion
-- **Frequency Data**: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) - Word frequency lists derived from OpenSubtitles 2018 corpus, used to rank inflections by how often they appear in real Greek text
+- **Ranked Inflections** (optional): Dilemma's `mg_ranked_forms.json` from the [`ciscoriordan/dilemma-data`](https://huggingface.co/datasets/ciscoriordan/dilemma-data) HuggingFace dataset provides pre-ranked, case-deduplicated inflection lists per lemma. Downloaded automatically if `huggingface_hub` is installed.
+- **Frequency Data** (fallback): [FrequencyWords](https://github.com/hermitdave/FrequencyWords) - Word frequency lists derived from OpenSubtitles 2018 corpus, used to rank inflections when pre-ranked forms are not available
 - **Fallback Data**: Pre-downloaded JSONL files in the repository
 
 ### Optional Configuration
@@ -118,6 +119,8 @@ DILEMMA_DATA_DIR=/path/to/dilemma/data
 ```
 
 When `DILEMMA_DATA_DIR` is set and `mg_lookup_scored.json` (or `mg_lookup.json`) is found, the generator will supplement kaikki-derived inflections with Dilemma's more comprehensive mappings. Without it, inflections are extracted from kaikki data only.
+
+The generator also automatically looks for `mg_ranked_forms.json` (pre-ranked inflections) in three locations: `data/` in this project, the `DILEMMA_DATA_DIR`, or the [`ciscoriordan/dilemma-data`](https://huggingface.co/datasets/ciscoriordan/dilemma-data) HuggingFace dataset (requires `pip install huggingface_hub`).
 
 #### Lemma Equivalences
 
@@ -147,7 +150,7 @@ The dictionaries include:
 
 ### Inflection Limit
 
-Each headword includes up to 30 inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`). Forms are ranked by corpus frequency so the most commonly encountered inflections are included first. Testing against a real Greek ebook showed that 30 inflections per headword covers ~95% of inflected form lookups, while keeping file size manageable. Inflection markup accounts for the majority of the dictionary's file size, so this limit directly affects build time and output size. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
+Each headword includes up to 30 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`), plus their case variants (Capitalized and UPPER forms for Kindle lookup matching). When pre-ranked forms from Dilemma are available, these 30 slots are filled with case-deduplicated forms in corpus frequency order, so no slots are wasted on duplicates like φας/Φας. Without pre-ranked forms, a local FrequencyRanker handles ranking. Testing against a real Greek ebook showed that 30 unique inflections per headword covers ~95% of inflected form lookups. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
 
 ### Excluded Content
 
