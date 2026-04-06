@@ -18,11 +18,44 @@ class DilemmaInflections:
         self._form_to_lemma = {}
         self._equivalences = {}  # variant -> canonical
         self._reverse_equivalences = {}  # canonical -> [variants]
+        self._ranked_forms = {}  # lemma -> [forms] pre-ranked by corpus frequency
+        self._load_ranked_forms()
         self._load_data()
         self._load_equivalences()
 
     def available(self):
         return len(self.lemma_to_forms) > 0
+
+    def has_ranked_forms(self):
+        """Return True if pre-ranked forms from mg_ranked_forms.json are loaded."""
+        return len(self._ranked_forms) > 0
+
+    def get_ranked_forms(self, lemma):
+        """Return pre-ranked forms for a lemma if available, or None.
+
+        Checks the lemma directly, then equivalent lemmas. Returns the
+        pre-ranked list (already in corpus frequency order, case-deduplicated)
+        or None if no ranked forms are available for this lemma.
+        """
+        if not self._ranked_forms:
+            return None
+
+        # Direct match
+        if lemma in self._ranked_forms:
+            return self._ranked_forms[lemma]
+
+        # Check equivalent lemmas
+        equiv_lemmas = self._get_equivalent_lemmas(lemma)
+        for eq_lemma in equiv_lemmas:
+            if eq_lemma != lemma and eq_lemma in self._ranked_forms:
+                return self._ranked_forms[eq_lemma]
+
+        # Fallback: if lemma is a known form, check its dilemma lemma
+        dilemma_lemma = self._form_to_lemma.get(lemma)
+        if dilemma_lemma and dilemma_lemma in self._ranked_forms:
+            return self._ranked_forms[dilemma_lemma]
+
+        return None
 
     def get_inflections(self, lemma):
         """Return inflections for a lemma, including equivalent lemma forms."""
@@ -81,10 +114,61 @@ class DilemmaInflections:
         return self._form_confidence.get(form, 0)
 
     def free_inflection_table(self):
-        """Free lemma_to_forms and _form_to_lemma after enhancement phase. Keeps _form_confidence for ranking."""
+        """Free lemma_to_forms and _form_to_lemma after enhancement phase.
+
+        Keeps _ranked_forms for html_generator and _form_confidence as fallback.
+        """
         self.lemma_to_forms.clear()
         self._form_to_lemma.clear()
         gc.collect()
+
+    def _load_ranked_forms(self):
+        """Load pre-ranked, case-deduplicated forms from mg_ranked_forms.json.
+
+        Tries in order:
+        1. lemma project's own data/ directory
+        2. DILEMMA_DATA_DIR env var or .env file
+        3. HuggingFace Hub (ciscoriordan/dilemma-data)
+        """
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        # 1. Check lemma's own data/ directory
+        local_path = os.path.join(project_root, 'data', 'mg_ranked_forms.json')
+        if os.path.exists(local_path):
+            self._read_ranked_forms(local_path)
+            return
+
+        # 2. Check DILEMMA_DATA_DIR
+        data_dir = self._find_data_dir()
+        if data_dir:
+            ranked_path = os.path.join(data_dir, 'mg_ranked_forms.json')
+            if os.path.exists(ranked_path):
+                self._read_ranked_forms(ranked_path)
+                return
+
+        # 3. Try HuggingFace Hub
+        try:
+            from huggingface_hub import hf_hub_download
+            cached_path = hf_hub_download(
+                repo_id='ciscoriordan/dilemma-data',
+                filename='mg_ranked_forms.json',
+                repo_type='dataset',
+            )
+            self._read_ranked_forms(cached_path)
+            return
+        except Exception:
+            pass
+
+        print("mg_ranked_forms.json not found, will fall back to inverted lookup ranking")
+
+    def _read_ranked_forms(self, path):
+        """Read mg_ranked_forms.json into self._ranked_forms."""
+        print(f"Loading pre-ranked forms from {path}...")
+        start = time.time()
+        with open(path, 'r', encoding='utf-8') as f:
+            self._ranked_forms = json.load(f)
+        elapsed = time.time() - start
+        print(f"Loaded pre-ranked forms for {len(self._ranked_forms)} lemmas in {elapsed:.1f}s")
 
     def _load_equivalences(self):
         """Load MG lemma equivalences from data/mg_lemma_equivalences.json."""

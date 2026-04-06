@@ -41,9 +41,17 @@ class HtmlGenerator:
         self.generator = generator
         self.entries = generator.entries
         self.output_dir = generator.output_dir
-        if HtmlGenerator._shared_frequency_ranker is None:
-            HtmlGenerator._shared_frequency_ranker = FrequencyRanker()
-        self.frequency_ranker = HtmlGenerator._shared_frequency_ranker
+        self._use_ranked_forms = (
+            generator.dilemma_inflections is not None
+            and generator.dilemma_inflections.has_ranked_forms()
+        )
+        if self._use_ranked_forms:
+            self.frequency_ranker = None
+            print("Using pre-ranked forms from dilemma, skipping FrequencyRanker")
+        else:
+            if HtmlGenerator._shared_frequency_ranker is None:
+                HtmlGenerator._shared_frequency_ranker = FrequencyRanker()
+            self.frequency_ranker = HtmlGenerator._shared_frequency_ranker
         self._opf_filename = None
 
     @property
@@ -103,6 +111,65 @@ class HtmlGenerator:
         tier3.sort(key=lambda x: -x[1])
 
         return [form for form, _ in tier1 + tier2 + tier3]
+
+    def _select_ranked_inflections(self, headword, entry_inflections, max_count):
+        """Select inflections using pre-ranked forms from dilemma.
+
+        Pre-ranked forms are already in corpus frequency order and case-
+        deduplicated (lowercase canonical only). Wiktionary forms not in
+        the ranked list are included first (they may be important forms
+        like 'είναι' for 'είμαι' that dilemma treats as separate lemmas),
+        then ranked forms fill remaining slots.
+        """
+        dilemma = self.generator.dilemma_inflections
+        ranked = dilemma.get_ranked_forms(headword) if dilemma else None
+
+        if not ranked:
+            # No ranked forms for this headword, just return entry inflections as-is
+            return entry_inflections[:max_count]
+
+        ranked_lower = set(f.lower() for f in ranked)
+
+        # First: entry inflections NOT covered by ranked forms (e.g., Wiktionary
+        # form-of entries that dilemma treats as separate lemmas)
+        result = []
+        result_lower = set()
+        for f in entry_inflections:
+            low = f.lower()
+            if low not in ranked_lower and low not in result_lower:
+                result.append(f)
+                result_lower.add(low)
+
+        # Then: ranked forms in corpus frequency order
+        for form in ranked:
+            low = form.lower()
+            if low not in result_lower:
+                result.append(form)
+                result_lower.add(low)
+            if len(result) >= max_count:
+                break
+
+        return result[:max_count]
+
+    def _add_case_variants_after_cap(self, forms):
+        """Add Capitalized and UPPER case variants of each form.
+
+        These extra variants don't count toward the inflection cap since
+        Kindle needs them for lookup matching but they're just case copies
+        of forms already selected.
+        """
+        result = list(forms)
+        seen = set(forms)
+        for form in forms:
+            capitalized = form[0].upper() + form[1:] if form else form
+            if capitalized not in seen:
+                result.append(capitalized)
+                seen.add(capitalized)
+            uppered = form.upper()
+            if uppered not in seen:
+                result.append(uppered)
+                seen.add(uppered)
+        return result
 
     def _normalize_for_sorting(self, word):
         normalized = word.lower().translate(_ACCENT_TABLE)
@@ -199,9 +266,19 @@ class HtmlGenerator:
 
         if is_proper_noun:
             # For proper nouns, keep original order
-            all_variations = single_word_inflections[:max_inflections]
+            capped_forms = single_word_inflections[:max_inflections]
+        elif self._use_ranked_forms:
+            capped_forms = self._select_ranked_inflections(word, single_word_inflections, max_inflections)
         else:
-            all_variations = self._rank_inflections(single_word_inflections)[:max_inflections]
+            capped_forms = self._rank_inflections(single_word_inflections)[:max_inflections]
+
+        # When using pre-ranked forms, add case variants AFTER capping so they
+        # don't eat cap slots. Each selected form gets Capitalized and UPPER
+        # variants added as extra idx:iform entries for Kindle lookup matching.
+        if self._use_ranked_forms:
+            all_variations = self._add_case_variants_after_cap(capped_forms)
+        else:
+            all_variations = capped_forms
 
         escaped_word = _escape_html(word)
         io.write(f"""\
