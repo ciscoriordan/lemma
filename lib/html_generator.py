@@ -299,8 +299,6 @@ class HtmlGenerator:
         else:
             date_info = f"Downloaded: {self.generator.download_date}"
 
-        volume_info = f"<h3>Volume: {self.generator.volume_label}</h3>" if self.generator.volume_label else ""
-
         content = f"""\
 <html>
   <head>
@@ -309,7 +307,6 @@ class HtmlGenerator:
   <body>
     <h1>Lemma Greek Dictionary</h1>
     <h3>From {source_desc}</h3>
-    {volume_info}
     <h3>A Lemma Project</h3>
     <p>{date_info}</p>
   </body>
@@ -377,17 +374,15 @@ class HtmlGenerator:
 
     def _create_opf_file(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
-        vol_suffix = f"_{self.generator.volume_suffix}" if self.generator.volume_suffix else ""
-        vol_desc = f" ({self.generator.volume_label})" if self.generator.volume_label else ""
 
-        unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}{vol_suffix.replace('_', '')}"
-        display_title = f"Lemma Greek Dictionary {source_name.upper()}{vol_desc}"
+        unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}"
+        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
 
         date_str = self.generator.extraction_date or self.generator.download_date
         title_with_date = f"{display_title} ({date_str})"
         out_lang = 'en' if self.generator.source_lang == 'en' else 'el'
 
-        opf_filename = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}{vol_suffix}.opf"
+        opf_filename = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}.opf"
 
         content = f"""\
 <?xml version="1.0"?>
@@ -442,10 +437,8 @@ class HtmlGenerator:
 
     def _create_toc_ncx(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
-        vol_suffix = f"_{self.generator.volume_suffix}" if self.generator.volume_suffix else ""
-        vol_desc = f" ({self.generator.volume_label})" if self.generator.volume_label else ""
-        unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}{vol_suffix.replace('_', '')}"
-        display_title = f"Lemma Greek Dictionary {source_name.upper()}{vol_desc}"
+        unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}"
+        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
 
         content = f"""\
 <?xml version="1.0" encoding="UTF-8"?>
