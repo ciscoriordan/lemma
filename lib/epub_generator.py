@@ -19,7 +19,8 @@ class EpubGenerator:
     def generate(self):
         print("\nGenerating EPUB file...")
 
-        epub_name = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}.epub"
+        vol_suffix = f"_{self.generator.volume_suffix}" if self.generator.volume_suffix else ""
+        epub_name = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}{vol_suffix}.epub"
         epub_path = os.path.join(self.output_dir, epub_name)
 
         with zipfile.ZipFile(epub_path, 'w') as zf:
