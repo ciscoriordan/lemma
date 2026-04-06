@@ -17,6 +17,9 @@ processed_entries_*.json
 # macOS system files
 .DS_Store
 
+# Local config
+.env
+
 # Temporary files
 *.tmp
 *.bak

@@ -1,6 +1,6 @@
 # Lemma Modern Greek Dictionary for Kindle
 
-A comprehensive Greek dictionary generator for Kindle e-readers, supporting both Greek-English and Greek-Greek (monolingual) dictionaries. This tool processes Wiktionary data to create `.mobi` dictionary files optimized for Kindle devices.
+A comprehensive Greek dictionary generator for Kindle e-readers, supporting both Greek-English and Greek-Greek (monolingual) dictionaries. This tool processes Wiktionary data to create `.epub` dictionary files for KDP upload, with optional `.mobi` output for sideload testing.
 
 ![krybontas](https://github.com/user-attachments/assets/b4720bd2-b3d6-4bbc-9295-5e0944cd0393)
 
@@ -13,12 +13,11 @@ A comprehensive Greek dictionary generator for Kindle e-readers, supporting both
 3. **Navigate to the `documents/dictionaries` folder** on your Kindle
    - If the `dictionaries` folder doesn't exist, create it inside `documents`
 4. **Copy the `.mobi` file(s)** from the `/dist` folder to `documents/dictionaries`
-   - For Greek-English: Copy the single `.mobi` file
-   - For Greek-Greek: Copy all 8 part files
+   - To generate `.mobi` files for sideloading, run with the `-m` flag (see below)
 5. **Safely eject your Kindle** from your computer
 6. **Restart your Kindle**:
    - Hold the power button for 40 seconds, or
-   - Go to Settings → Device Options → Restart
+   - Go to Settings > Device Options > Restart
 7. The dictionary will be available after restart
 
 ### Setting as Default Greek Dictionary
@@ -27,7 +26,6 @@ A comprehensive Greek dictionary generator for Kindle e-readers, supporting both
 2. **Select a Greek word** to look up
 3. **Tap the dictionary name** at the bottom of the popup
 4. **Select "Lemma Greek Dictionary"** from the list
-   - For Greek-Greek: The appropriate part will be selected automatically based on the word
 5. The dictionary is now your default for Greek lookups
 
 ## Pre-built Dictionaries
@@ -36,26 +34,19 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 
 ### Greek-English Dictionary
 
-- `lemma_greek_en_[date].mobi` - Single file containing all entries
+- `lemma_greek_en_[date].epub` - EPUB for KDP upload
+- `lemma_greek_en_[date].mobi` - MOBI for sideload testing (generated with `-m` flag)
 
 ### Greek-Greek (Monolingual) Dictionary
 
-Due to Kindle's size limitations, the Greek monolingual dictionary is split into 5 parts by letter groups:
-
-- `lemma_greek_el_[date]_alpha_beta_gamma_delta_epsilon.mobi` - Part 1: Α-Β-Γ-Δ-Ε
-- `lemma_greek_el_[date]_zeta_eta_theta_iota_kappa.mobi` - Part 2: Ζ-Η-Θ-Ι-Κ
-- `lemma_greek_el_[date]_lambda_mu_nu_xi_omicron.mobi` - Part 3: Λ-Μ-Ν-Ξ-Ο
-- `lemma_greek_el_[date]_pi_rho_sigma_tau_upsilon.mobi` - Part 4: Π-Ρ-Σ-Τ-Υ
-- `lemma_greek_el_[date]_phi_chi_psi_omega.mobi` - Part 5: Φ-Χ-Ψ-Ω
-
-**Important**: Install all 5 parts for complete coverage. Kindle will automatically select the correct part based on the word you're looking up. Each part includes inflections that belong to headwords in that part, even if those inflections would alphabetically belong elsewhere, ensuring lookups always work correctly.
+- `lemma_greek_el_[date].epub` - EPUB for KDP upload
+- `lemma_greek_el_[date].mobi` - MOBI for sideload testing (generated with `-m` flag)
 
 ## Features
 
 - **Bilingual & Monolingual Support**: Generate Greek-English or Greek-Greek dictionaries
-- **Smart Letter-Based Splitting**: Greek monolingual dictionary splits into 8 logical parts by letter groups
-- **Inflection Support**: Automatically links inflected forms to their lemmas
-- **Inflection Grouping**: Headwords are included in any part where their inflections appear
+- **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/fcsriordan/dilemma) when available
+- **Frequency-Ranked Inflections**: Prioritizes the most commonly encountered inflected forms using corpus frequency data from [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018)
 - **Etymology Information**: Includes word origins where available (English dictionary only)
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
@@ -64,9 +55,9 @@ Due to Kindle's size limitations, the Greek monolingual dictionary is split into
 
 ### Prerequisites
 
-- Ruby (2.5 or higher)
-- Kindle Previewer 3 (for `.mobi` generation)
-- Git LFS (for handling large dictionary data files)
+- Python 3.8+
+- Kindle Previewer 3 (optional, only needed for `.mobi` generation with `-m` flag)
+- Works on macOS, Linux, and Windows
 
 ### Installation
 
@@ -75,51 +66,61 @@ Due to Kindle's size limitations, the Greek monolingual dictionary is split into
 git clone https://github.com/fr2019/lemma.git
 cd lemma
 
-# Install Git LFS if not already installed
-git lfs install
-git lfs pull
-
-# Run the generator
-ruby greek_kindle_dictionary.rb [options]
+# Run the generator (produces EPUB by default)
+python3 greek_kindle_dictionary.py [options]
+# On Windows, use: python greek_kindle_dictionary.py [options]
 ```
 
 ### Options
 
 ```bash
-# Generate Greek-English dictionary (default)
-ruby greek_kindle_dictionary.rb
+# Generate Greek-English dictionary (default, EPUB output)
+python3 greek_kindle_dictionary.py
 
-# Generate Greek-Greek monolingual dictionary (all 5 parts)
-ruby greek_kindle_dictionary.rb -s el
+# Generate Greek-Greek monolingual dictionary
+python3 greek_kindle_dictionary.py -s el
 
-# Generate only part 2 (Ζ-Η-Θ-Ι-Κ) of Greek-Greek dictionary
-ruby greek_kindle_dictionary.rb -s el -p 2
+# Also generate .mobi for sideload testing
+python3 greek_kindle_dictionary.py -m
 
 # Generate a test dictionary with only 10% of entries
-ruby greek_kindle_dictionary.rb -l 10
+python3 greek_kindle_dictionary.py -l 10
 
 # Combine options
-ruby greek_kindle_dictionary.rb -s el -l 5
+python3 greek_kindle_dictionary.py -s el -l 5 -m
 ```
 
 ### Command Line Arguments
 
 - `-s, --source LANG`: Source Wiktionary language ('en' for English or 'el' for Greek)
-- `-p, --part NUMBER`: For Greek source (-s el), generate specific part (1-5)
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
-- `-h, --help`: Show help message with letter ranges for each part
+- `-m, --mobi`: Also generate `.mobi` via Kindle Previewer (for sideload testing)
+- `-h, --help`: Show help message
 
 ## Data Sources
 
 The dictionaries are built from:
 
-- **Primary Source**: [Kaikki.org](https://kaikki.org/) - Machine-readable Wiktionary data
-- **Fallback Data**: Pre-downloaded JSONL files in the repository (via Git LFS)
+- **Primary Source**: [Kaikki.org](https://kaikki.org/) - Machine-readable Wiktionary data (definitions, POS, etymology)
+- **Inflection Data** (optional): [Dilemma](https://github.com/fcsriordan/dilemma) - Greek lemmatizer with 2.76M Modern Greek form-to-lemma mappings compiled from English and Greek Wiktionary, treebank corpora, and LSJ expansion
+- **Frequency Data**: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) - Word frequency lists derived from OpenSubtitles 2018 corpus, used to rank inflections by how often they appear in real Greek text
+- **Fallback Data**: Pre-downloaded JSONL files in the repository
 
-Data files:
+### Optional Configuration
 
-- `greek_data_en_20250716.jsonl` - English Wiktionary Greek entries
-- `greek_data_el_20250717.jsonl` - Greek Wiktionary Greek entries
+To use local kaikki dumps or Dilemma inflection data, create a `.env` file in the project root:
+
+```
+KAIKKI_LOCAL_DIR=/path/to/kaikki/dumps
+DILEMMA_DATA_DIR=/path/to/dilemma/data
+```
+
+When `DILEMMA_DATA_DIR` is set and `mg_lookup.json` is found, the generator will supplement kaikki-derived inflections with Dilemma's more comprehensive mappings. Without it, inflections are extracted from kaikki data only.
+
+### Related Projects
+
+- [Dilemma](https://github.com/fcsriordan/dilemma) - Greek lemmatizer. Provides the inflection lookup tables used by Lemma.
+- [Opla](https://github.com/fcsriordan/opla) - Greek POS tagger and dependency parser, built on Dilemma for lemmatization.
 
 ## Dictionary Content
 
@@ -132,6 +133,10 @@ The dictionaries include:
 - **Etymology**: Word origins and history (English dictionary only)
 - **Domain Tags**: Subject area indicators (e.g., γλωσσολογία, γραμματική)
 
+### Inflection Limit
+
+Each headword includes up to 30 inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`). Forms are ranked by corpus frequency so the most commonly encountered inflections are included first. Testing against a real Greek ebook showed that 30 inflections per headword covers ~95% of inflected form lookups, while keeping file size manageable. Inflection markup accounts for the majority of the dictionary's file size, so this limit directly affects build time and output size. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
+
 ### Excluded Content
 
 The following are filtered out as they cannot be selected in Kindle texts:
@@ -141,45 +146,30 @@ The following are filtered out as they cannot be selected in Kindle texts:
 - Individual letters and symbols
 - Abbreviations and contractions
 
-## Understanding the Split Dictionary
-
-The Greek monolingual dictionary contains over 449,000 headwords. To ensure reliable building and optimal performance, the dictionary is split into 5 parts based on Greek letter groups (5 letters per part, except the last):
-
-| Part | Letters   | Example Words                         |
-| ---- | --------- | ------------------------------------- |
-| 1    | Α-Β-Γ-Δ-Ε | αγάπη, βιβλίο, γάτα, δέντρο, ελπίδα   |
-| 2    | Ζ-Η-Θ-Ι-Κ | ζωή, ήλιος, θάλασσα, ιστορία, καρδιά  |
-| 3    | Λ-Μ-Ν-Ξ-Ο | λόγος, μητέρα, νερό, ξύλο, ουρανός    |
-| 4    | Π-Ρ-Σ-Τ-Υ | πατέρας, ρόδο, σπίτι, τραγούδι, ύπνος |
-| 5    | Φ-Χ-Ψ-Ω   | φως, χαρά, ψυχή, ώρα                  |
-
-Each part contains approximately 80,000-100,000 headwords, plus any headwords whose inflected forms start with those letters. This ensures that looking up any inflected form will always find its lemma.
-
 ## Troubleshooting
 
 ### Dictionary Not Appearing
 
 - Ensure the `.mobi` file(s) are in the `documents/dictionaries` folder
-- For Greek-Greek: Make sure all 5 parts are installed
 - **Always restart your Kindle** after adding new dictionaries
 - If still not appearing, try a hard restart (hold power button for 40 seconds)
 
 ### Lookup Not Working
 
 - Make sure you've set the dictionary as default for Greek
-- For Greek-Greek: Ensure you have all 5 parts installed
 - Some older Kindle models may have limited Greek support
 
 ### Building Issues
 
-- **Kindle Previewer not found**: Install from [Amazon's website](https://www.amazon.com/gp/feature.html?docId=1000765261)
+- **Kindle Previewer not found**: Only needed for `.mobi` generation (`-m` flag). Install from [Amazon's website](https://www.amazon.com/gp/feature.html?docId=1000765261)
 - **Download freezes**: Use pre-downloaded data files from the repository
 - **Memory issues**: Use the `-l` option to build smaller test dictionaries first
-- **Part generation fails**: Ensure you have enough disk space for temporary files
 
 ## License
 
-Dictionary content is derived from Wiktionary and is available under the Creative Commons Attribution-ShareAlike License.
+- **Code**: [MIT License](LICENSE)
+- **Dictionary content and data**: [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/) (derived from Wiktionary)
+- **Frequency data** (`data/el_full.txt`): [MIT License](https://github.com/hermitdave/FrequencyWords/blob/master/LICENSE) (from FrequencyWords/OpenSubtitles)
 
 ## Contributing
 
@@ -189,3 +179,6 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 - Wiktionary contributors for the source data
 - [Kaikki.org](https://kaikki.org/) for providing machine-readable Wiktionary dumps
+- [Dilemma](https://github.com/fcsriordan/dilemma) for Greek lemmatization and inflection data
+- [FrequencyWords](https://github.com/hermitdave/FrequencyWords) for corpus frequency data (MIT license)
+- [Opla](https://github.com/fcsriordan/opla) for Greek NLP infrastructure
