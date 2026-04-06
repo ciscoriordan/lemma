@@ -47,8 +47,7 @@ class GreekDictionaryGenerator:
         print(f"Download date: {self.download_date}")
 
         self._download_data()
-        if self.source_lang == 'el':
-            self.dilemma_inflections = DilemmaInflections()
+        self.dilemma_inflections = DilemmaInflections()
         self._process_entries()
         gc.collect()
         self._create_output_files()
