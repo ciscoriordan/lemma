@@ -63,6 +63,36 @@ class HtmlGenerator:
         """Full builds include extra info like head templates and examples."""
         return self.generator.enable_links or self.generator.enable_etymology
 
+    # Matches Greek words (with accents/diacritics) that might be headwords
+    _GREEK_WORD_RE = re.compile(r'([\u0370-\u03FF\u1F00-\u1FFF]+)')
+
+    @staticmethod
+    def _format_example_text(ex):
+        """Format example text with bold offsets if available."""
+        text = ex.get('text', '')
+        offsets = ex.get('bold_text_offsets')
+        if not offsets:
+            return _escape_html(text)
+        # Build string with <b> tags inserted at offsets (process right-to-left)
+        for start, end in sorted(offsets, reverse=True):
+            text = text[:start] + '\x01' + text[start:end] + '\x02' + text[end:]
+        escaped = _escape_html(text)
+        return escaped.replace('\x01', '<b>').replace('\x02', '</b>')
+
+    def _linkify_definition(self, text):
+        """Replace Greek words in definition text with anchor links if they are headwords."""
+        if not self.generator.enable_links:
+            return _escape_html(text)
+        parts = self._GREEK_WORD_RE.split(text)
+        result = []
+        for part in parts:
+            if self._GREEK_WORD_RE.fullmatch(part) and part in self.entries:
+                escaped = _escape_html(part)
+                result.append(f'<a href="#hw_{escaped}">{escaped}</a>')
+            else:
+                result.append(_escape_html(part))
+        return ''.join(result)
+
     def create_output_files(self):
         # Initialize with base output dir
         self._update_output_dir()
@@ -281,8 +311,10 @@ class HtmlGenerator:
         all_variations = capped_forms
 
         escaped_word = _escape_html(word)
+        anchor = f'<a id="hw_{escaped_word}"></a>' if self.generator.enable_links else ''
         io.write(f"""\
 <idx:entry name="default" scriptable="yes" spell="yes">
+  {anchor}
   <idx:short>
     <idx:orth value="{escaped_word}"><b>{escaped_word}</b>
 """)
@@ -339,15 +371,15 @@ class HtmlGenerator:
                 # Limit definitions
                 for def_idx, definition in enumerate(all_definitions[:5]):
                     if len(all_definitions) > 1:
-                        io.write(f"  <p class='def'>{def_idx + 1}. {_escape_html(definition)}</p>\n")
+                        io.write(f"  <p class='def'>{def_idx + 1}. {self._linkify_definition(definition)}</p>\n")
                     else:
-                        io.write(f"  <p class='def'>{_escape_html(definition)}</p>\n")
+                        io.write(f"  <p class='def'>{self._linkify_definition(definition)}</p>\n")
 
                     # Show example for full builds
                     if self._is_full_build and def_idx < len(all_examples):
                         ex = all_examples[def_idx]
                         if ex and ex.get('text'):
-                            ex_text = _escape_html(ex['text'])
+                            ex_text = self._format_example_text(ex)
                             ex_trans = _escape_html(ex.get('translation', ''))
                             if ex_trans:
                                 io.write(f"  <p class='ex'>{ex_text} - {ex_trans}</p>\n")
@@ -375,12 +407,12 @@ class HtmlGenerator:
                 entry_examples = entry.get('examples') or []
                 if len(defs) > 1:
                     for def_idx, definition in enumerate(defs):
-                        io.write(f"  <p class='def'>{def_idx + 1}. {_escape_html(definition)}</p>\n")
+                        io.write(f"  <p class='def'>{def_idx + 1}. {self._linkify_definition(definition)}</p>\n")
                         # Show example for full builds
                         if self._is_full_build and def_idx < len(entry_examples):
                             ex = entry_examples[def_idx]
                             if ex and ex.get('text'):
-                                ex_text = _escape_html(ex['text'])
+                                ex_text = self._format_example_text(ex)
                                 ex_trans = _escape_html(ex.get('translation', ''))
                                 if ex_trans:
                                     io.write(f"  <p class='ex'>{ex_text} - {ex_trans}</p>\n")
@@ -388,12 +420,12 @@ class HtmlGenerator:
                                     io.write(f"  <p class='ex'>{ex_text}</p>\n")
                 else:
                     for def_idx, definition in enumerate(defs):
-                        io.write(f"  <p class='def'>{_escape_html(definition)}</p>\n")
+                        io.write(f"  <p class='def'>{self._linkify_definition(definition)}</p>\n")
                         # Show example for full builds
                         if self._is_full_build and def_idx < len(entry_examples):
                             ex = entry_examples[def_idx]
                             if ex and ex.get('text'):
-                                ex_text = _escape_html(ex['text'])
+                                ex_text = self._format_example_text(ex)
                                 ex_trans = _escape_html(ex.get('translation', ''))
                                 if ex_trans:
                                     io.write(f"  <p class='ex'>{ex_text} - {ex_trans}</p>\n")

@@ -329,7 +329,10 @@ class EntryProcessor:
             text = ex.get("text", "").strip()
             translation = ex.get("translation", "").strip()
             if text:
-                return {"text": text, "translation": translation}
+                result = {"text": text, "translation": translation}
+                if "bold_text_offsets" in ex:
+                    result["bold_text_offsets"] = ex["bold_text_offsets"]
+                return result
         return None
 
     def _expand_parentheses(self, word):
