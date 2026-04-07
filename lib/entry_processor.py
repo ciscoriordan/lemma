@@ -130,8 +130,8 @@ class EntryProcessor:
                 del self.entries[k]
             print(f"Limited dictionary to {len(self.entries)} headwords ({self.generator.limit_percent}%)")
 
-        # Enhance inflections with dilemma data if available
-        self._enhance_with_dilemma()
+        # Set inflections: Dilemma is primary source, Wiktionary forms are fallback
+        self._set_inflections()
 
         # Free dilemma inflection table (confidence data kept for ranking)
         dilemma = self.generator.dilemma_inflections
@@ -139,9 +139,6 @@ class EntryProcessor:
             dilemma.free_inflection_table()
 
         gc.collect()
-
-        # Add case variations for all entries
-        self._add_case_variations()
 
         # Report final statistics
         self._report_statistics()
@@ -436,63 +433,39 @@ class EntryProcessor:
         # Simple check for common loanwords that might have Latin characters
         return False
 
-    def _enhance_with_dilemma(self):
+    def _set_inflections(self):
+        """Set inflections for all entries. Dilemma is the primary source.
+        Wiktionary forms are used as fallback only when Dilemma has nothing.
+        Form-of entries get no inflections (their forms belong on the real entry).
+        """
         dilemma = self.generator.dilemma_inflections
-        if not dilemma or not dilemma.available():
-            return
+        has_dilemma = dilemma and dilemma.available()
+        dilemma_count = 0
+        wiktionary_fallback_count = 0
 
-        enhanced_count = 0
         for word, entries_list in self.entries.items():
-            dilemma_forms = dilemma.get_inflections(word)
-            if not dilemma_forms:
-                continue
-
-            # Filter to single-word Greek forms only
-            valid_forms = [f for f in dilemma_forms if ' ' not in f and _GREEK_RE.search(f)]
-            if not valid_forms:
-                continue
-
             for entry in entries_list:
-                # Skip form-of entries - their inflections belong on the real entry
+                # Form-of entries get no inflections
                 if entry.get('form_of_targets'):
+                    entry['inflections'] = []
                     continue
-                if entry.get('inflections') is None:
-                    entry['inflections'] = []
-                before = len(entry['inflections'])
-                # Combine and deduplicate
-                existing = set(entry['inflections'])
-                for form in valid_forms:
-                    if form not in existing:
-                        entry['inflections'].append(form)
-                        existing.add(form)
-                enhanced_count += len(entry['inflections']) - before
 
-        if enhanced_count > 0:
-            print(f"Added {enhanced_count} inflections from dilemma")
+                # Try Dilemma first
+                if has_dilemma:
+                    dilemma_forms = dilemma.get_inflections(word)
+                    if dilemma_forms:
+                        valid = [f for f in dilemma_forms if ' ' not in f and _GREEK_RE.search(f)]
+                        if valid:
+                            entry['inflections'] = valid
+                            dilemma_count += len(valid)
+                            continue
 
-    def _add_case_variations(self):
-        for word, entries in self.entries.items():
-            for entry in entries:
-                if entry.get('inflections') is None:
-                    entry['inflections'] = []
+                # Fallback: keep Wiktionary-extracted inflections (already on entry)
+                wiktionary_fallback_count += len(entry.get('inflections') or [])
 
-                existing = set(entry['inflections'])
-
-                # Add case variations of the headword
-                capitalized = word[0].upper() + word[1:] if word else word
-                if capitalized != word and capitalized not in existing:
-                    entry['inflections'].append(capitalized)
-                    existing.add(capitalized)
-
-                lowered = word.lower()
-                if lowered != word and lowered not in existing:
-                    entry['inflections'].append(lowered)
-                    existing.add(lowered)
-
-                uppered = word.upper()
-                if uppered != word and uppered != capitalized and uppered not in existing:
-                    entry['inflections'].append(uppered)
-                    existing.add(uppered)
+        if has_dilemma:
+            print(f"Inflections from dilemma: {dilemma_count}")
+        print(f"Inflections from wiktionary (fallback): {wiktionary_fallback_count}")
 
     def _report_statistics(self):
         total_inflections = 0

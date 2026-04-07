@@ -150,23 +150,23 @@ class HtmlGenerator:
     def _select_ranked_inflections(self, headword, entry_inflections, max_count):
         """Select inflections using pre-ranked forms from dilemma.
 
-        Pre-ranked forms are already in corpus frequency order and case-
-        deduplicated (lowercase canonical only). Wiktionary forms not in
-        the ranked list are included first (they may be important forms
-        like 'είναι' for 'είμαι' that dilemma treats as separate lemmas),
-        then ranked forms fill remaining slots.
+        The entry_inflections list comes from the entry processor, which has
+        already decided what inflections this entry should have (Dilemma as
+        primary, Wiktionary as fallback, none for form-of entries). This
+        method re-ranks them using Dilemma's corpus frequency order.
         """
+        if not entry_inflections:
+            return []
+
         dilemma = self.generator.dilemma_inflections
         ranked = dilemma.get_ranked_forms(headword) if dilemma else None
 
         if not ranked:
-            # No ranked forms for this headword, just return entry inflections as-is
             return entry_inflections[:max_count]
 
         ranked_lower = set(f.lower() for f in ranked)
 
-        # First: entry inflections NOT covered by ranked forms (e.g., Wiktionary
-        # form-of entries that dilemma treats as separate lemmas)
+        # Entry inflections not in ranked list go first
         result = []
         result_lower = set()
         for f in entry_inflections:
@@ -175,7 +175,7 @@ class HtmlGenerator:
                 result.append(f)
                 result_lower.add(low)
 
-        # Then: ranked forms in corpus frequency order
+        # Then ranked forms in corpus frequency order
         for form in ranked:
             low = form.lower()
             if low not in result_lower:
@@ -282,20 +282,14 @@ class HtmlGenerator:
         # Limit inflections to reduce complexity
         max_inflections = self.generator.max_inflections or MAX_INFLECTIONS
 
-        # Skip inflections for pure form-of entries (all sub-entries have form_of_targets).
-        # This prevents form-of entries from stealing lookups away from the
-        # real definition entry (e.g. ποτίζομαι stealing ποτισμένος from ποτίζω).
-        is_pure_form_of = all(e.get('form_of_targets') for e in entries)
-
         # Combine all inflections from all entries for this word
         all_inflections = []
         seen = set()
-        if not is_pure_form_of:
-            for e in entries:
-                for inf in (e.get('inflections') or []):
-                    if inf not in seen:
-                        seen.add(inf)
-                        all_inflections.append(inf)
+        for e in entries:
+            for inf in (e.get('inflections') or []):
+                if inf not in seen:
+                    seen.add(inf)
+                    all_inflections.append(inf)
 
         # Filter out multi-word inflections (containing spaces)
         single_word_inflections = [inf for inf in all_inflections if ' ' not in inf]
@@ -306,9 +300,7 @@ class HtmlGenerator:
             for e in entries
         )
 
-        if is_pure_form_of:
-            all_variations = []
-        elif is_proper_noun:
+        if is_proper_noun:
             # For proper nouns, keep original order
             all_variations = single_word_inflections[:max_inflections]
         elif self._use_ranked_forms:
