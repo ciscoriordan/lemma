@@ -297,17 +297,20 @@ class EntryProcessor:
             else:
                 definition = str(glosses)
 
-            # Add raw_tags if present, otherwise fall back to tags
-            raw_tags = sense.get("raw_tags")
-            tags = sense.get("tags")
-            if isinstance(raw_tags, list) and raw_tags:
-                tag_str = ", ".join(raw_tags)
-                definition = f"[{tag_str}] {definition}"
-            elif isinstance(tags, list) and tags:
-                # Convert hyphenated tag values to spaced (e.g., "indirect-object" -> "indirect object")
-                formatted_tags = [t.replace("-", " ") for t in tags]
-                tag_str = ", ".join(formatted_tags)
-                definition = f"[{tag_str}] {definition}"
+            # Add sense tags for non-form-of definitions only
+            # Form-of definitions already contain the grammatical info in the gloss
+            tags = sense.get("tags") or []
+            is_form_of = bool(sense.get("form_of")) or "form-of" in tags or "alt-of" in tags
+            if not is_form_of:
+                raw_tags = sense.get("raw_tags")
+                tags = sense.get("tags")
+                if isinstance(raw_tags, list) and raw_tags:
+                    tag_str = ", ".join(raw_tags)
+                    definition = f"({tag_str}) {definition}"
+                elif isinstance(tags, list) and tags:
+                    formatted_tags = [t.replace("-", " ") for t in tags]
+                    tag_str = ", ".join(formatted_tags)
+                    definition = f"({tag_str}) {definition}"
 
         elif sense.get("raw_glosses"):
             raw_glosses = sense["raw_glosses"]

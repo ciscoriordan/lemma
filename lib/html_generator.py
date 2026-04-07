@@ -314,8 +314,7 @@ class HtmlGenerator:
         anchor = f'<a id="hw_{escaped_word}"></a>' if self.generator.enable_links else ''
         io.write(f"""\
 <idx:entry name="default" scriptable="yes" spell="yes">
-  {anchor}
-  <idx:short>
+  <idx:short>{anchor}
     <idx:orth value="{escaped_word}"><b>{escaped_word}</b>
 """)
 
@@ -434,7 +433,7 @@ class HtmlGenerator:
 
                 etym = entry.get('etymology')
                 if etym and etym.strip() and self.generator.enable_etymology:
-                    io.write(f"  <p class='etym'>[Etymology: {_escape_html(etym)}]</p>\n")
+                    io.write(f"  <hr/>\n  <p class='etym'><i>{_escape_html(etym)}</i></p>\n")
 
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <hr />\n")
