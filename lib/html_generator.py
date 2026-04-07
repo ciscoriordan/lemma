@@ -58,6 +58,11 @@ class HtmlGenerator:
     def opf_filename(self):
         return self._opf_filename
 
+    @property
+    def _is_full_build(self):
+        """Full builds include extra info like head templates and examples."""
+        return self.generator.enable_links or self.generator.enable_etymology
+
     def create_output_files(self):
         # Initialize with base output dir
         self._update_output_dir()
@@ -227,6 +232,7 @@ class HtmlGenerator:
       i { font-style: italic; }
       .pos { font-style: italic; color: #666; }
       .def { margin-left: 20px; }
+      .ex { font-size: 0.85em; color: #555; margin-left: 20px; }
       .etym { font-size: 0.9em; color: #444; margin-top: 0.3em; }
       hr { margin: 5px 0; border: none; border-top: 1px solid #ccc; }
     </style>
@@ -302,6 +308,14 @@ class HtmlGenerator:
 
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
+            # Show head template expansion for full builds
+            if self._is_full_build:
+                for e in entries:
+                    head_exp = e.get('head_expansion')
+                    if head_exp:
+                        io.write(f"  <p><i>{_escape_html(head_exp)}</i></p>\n")
+                        break  # Only show the first one
+
             # Combine all definitions by POS
             pos_groups = {}
             pos_order = []
@@ -317,14 +331,19 @@ class HtmlGenerator:
                 pos_display = self._format_pos(pos)
                 io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
 
-                # Combine all definitions for this POS
+                # Combine all definitions and examples for this POS
                 all_definitions = []
+                all_examples = []
                 def_seen = set()
                 for e in pos_entries:
-                    for d in e.get('definitions', []):
+                    entry_examples = e.get('examples') or []
+                    for i, d in enumerate(e.get('definitions', [])):
                         if d not in def_seen:
                             def_seen.add(d)
                             all_definitions.append(d)
+                            # Keep examples aligned with definitions
+                            ex = entry_examples[i] if i < len(entry_examples) else None
+                            all_examples.append(ex)
 
                 # Limit definitions
                 for def_idx, definition in enumerate(all_definitions[:5]):
@@ -333,22 +352,62 @@ class HtmlGenerator:
                     else:
                         io.write(f"  <p class='def'>{_escape_html(definition)}</p>\n")
 
+                    # Show example for full builds
+                    if self._is_full_build and def_idx < len(all_examples):
+                        ex = all_examples[def_idx]
+                        if ex and ex.get('text'):
+                            ex_text = _escape_html(ex['text'])
+                            ex_trans = _escape_html(ex.get('translation', ''))
+                            if ex_trans:
+                                io.write(f"  <p class='ex'>{ex_text} - {ex_trans}</p>\n")
+                            else:
+                                io.write(f"  <p class='ex'>{ex_text}</p>\n")
+
                 # Add separator between POS groups
                 if len(pos_order) > 1 and idx < len(pos_order) - 1:
                     io.write("  <hr />\n")
         else:
             # Keep full format for English
+            # Show head template expansion for full builds
+            if self._is_full_build:
+                for e in entries:
+                    head_exp = e.get('head_expansion')
+                    if head_exp:
+                        io.write(f"  <p><i>{_escape_html(head_exp)}</i></p>\n")
+                        break  # Only show the first one
+
             for idx, entry in enumerate(entries):
                 pos_display = self._format_pos(entry.get('pos'))
                 io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
 
                 defs = entry.get('definitions', [])
+                entry_examples = entry.get('examples') or []
                 if len(defs) > 1:
                     for def_idx, definition in enumerate(defs):
                         io.write(f"  <p class='def'>{def_idx + 1}. {_escape_html(definition)}</p>\n")
+                        # Show example for full builds
+                        if self._is_full_build and def_idx < len(entry_examples):
+                            ex = entry_examples[def_idx]
+                            if ex and ex.get('text'):
+                                ex_text = _escape_html(ex['text'])
+                                ex_trans = _escape_html(ex.get('translation', ''))
+                                if ex_trans:
+                                    io.write(f"  <p class='ex'>{ex_text} - {ex_trans}</p>\n")
+                                else:
+                                    io.write(f"  <p class='ex'>{ex_text}</p>\n")
                 else:
-                    for definition in defs:
+                    for def_idx, definition in enumerate(defs):
                         io.write(f"  <p class='def'>{_escape_html(definition)}</p>\n")
+                        # Show example for full builds
+                        if self._is_full_build and def_idx < len(entry_examples):
+                            ex = entry_examples[def_idx]
+                            if ex and ex.get('text'):
+                                ex_text = _escape_html(ex['text'])
+                                ex_trans = _escape_html(ex.get('translation', ''))
+                                if ex_trans:
+                                    io.write(f"  <p class='ex'>{ex_text} - {ex_trans}</p>\n")
+                                else:
+                                    io.write(f"  <p class='ex'>{ex_text}</p>\n")
 
                 etym = entry.get('etymology')
                 if etym and etym.strip() and self.generator.enable_etymology:

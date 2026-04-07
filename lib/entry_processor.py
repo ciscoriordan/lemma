@@ -189,16 +189,30 @@ class EntryProcessor:
                             if ' ' not in target and target not in form_of_targets:
                                 form_of_targets.append(target)
 
-        # Process definitions from senses
+        # Process definitions from senses, collecting examples alongside
+        examples = []
         if senses:
             for sense in senses:
                 definition = self._extract_definition_from_sense(sense)
                 if definition.strip():
                     definitions.append(definition)
+                    # Extract first example for this sense (max 1 per sense)
+                    example = self._extract_example_from_sense(sense)
+                    examples.append(example)  # May be None; kept aligned with definitions
 
         # Store each definition separately
         if not definitions:
             definitions = ["No definition available"]
+            examples = [None]
+
+        # Extract head_templates expansion
+        head_expansion = None
+        if entry.get("head_templates"):
+            for template in entry["head_templates"]:
+                expansion = template.get("expansion")
+                if expansion and expansion.strip():
+                    head_expansion = expansion.strip()
+                    break  # Use the first one
 
         # Handle forms and collect inflections
         inflections = self._collect_inflections(entry, word)
@@ -222,16 +236,22 @@ class EntryProcessor:
                 break
 
         if existing_entry:
-            # Merge definitions and inflections
-            existing_entry['definitions'] += definitions
-            # Deduplicate definitions
-            seen = set()
-            unique_defs = []
-            for d in existing_entry['definitions']:
+            # Merge definitions, examples, and inflections
+            existing_defs = existing_entry['definitions']
+            existing_examples = existing_entry.get('examples') or []
+            # Pad examples list if it was shorter than definitions
+            while len(existing_examples) < len(existing_defs):
+                existing_examples.append(None)
+
+            # Deduplicate definitions while keeping examples aligned
+            seen = set(existing_defs)
+            for d, ex in zip(definitions, examples):
                 if d not in seen:
                     seen.add(d)
-                    unique_defs.append(d)
-            existing_entry['definitions'] = unique_defs
+                    existing_defs.append(d)
+                    existing_examples.append(ex)
+            existing_entry['definitions'] = existing_defs
+            existing_entry['examples'] = existing_examples
 
             existing_entry['inflections'] += inflections
             # Deduplicate inflections
@@ -247,6 +267,8 @@ class EntryProcessor:
                 existing_entry['etymology'] = entry.get("etymology_text")
             if not existing_entry.get('expanded_from_template'):
                 existing_entry['expanded_from_template'] = expanded_from_template
+            if not existing_entry.get('head_expansion') and head_expansion:
+                existing_entry['head_expansion'] = head_expansion
             # Merge form_of targets
             existing_targets = existing_entry.get('form_of_targets') or []
             for t in form_of_targets:
@@ -257,7 +279,9 @@ class EntryProcessor:
             self.entries[word].append({
                 'pos': pos,
                 'definitions': definitions,
+                'examples': examples,
                 'etymology': entry.get("etymology_text"),
+                'head_expansion': head_expansion,
                 'inflections': inflections,
                 'expanded_from_template': expanded_from_template,
                 'form_of_targets': form_of_targets,
@@ -273,11 +297,17 @@ class EntryProcessor:
             else:
                 definition = str(glosses)
 
-            # Add raw_tags if present
+            # Add raw_tags if present, otherwise fall back to tags
             raw_tags = sense.get("raw_tags")
-            if isinstance(raw_tags, list):
-                tags = ", ".join(raw_tags)
-                definition = f"[{tags}] {definition}"
+            tags = sense.get("tags")
+            if isinstance(raw_tags, list) and raw_tags:
+                tag_str = ", ".join(raw_tags)
+                definition = f"[{tag_str}] {definition}"
+            elif isinstance(tags, list) and tags:
+                # Convert hyphenated tag values to spaced (e.g., "indirect-object" -> "indirect object")
+                formatted_tags = [t.replace("-", " ") for t in tags]
+                tag_str = ", ".join(formatted_tags)
+                definition = f"[{tag_str}] {definition}"
 
         elif sense.get("raw_glosses"):
             raw_glosses = sense["raw_glosses"]
@@ -287,6 +317,20 @@ class EntryProcessor:
                 definition = str(raw_glosses)
 
         return definition
+
+    def _extract_example_from_sense(self, sense):
+        """Extract the first example from a sense, returning a dict with text and translation, or None."""
+        examples = sense.get("examples")
+        if not isinstance(examples, list) or not examples:
+            return None
+        for ex in examples:
+            if not isinstance(ex, dict):
+                continue
+            text = ex.get("text", "").strip()
+            translation = ex.get("translation", "").strip()
+            if text:
+                return {"text": text, "translation": translation}
+        return None
 
     def _expand_parentheses(self, word):
         """Handle forms like 'πηγαίνο(υ)με' -> ['πηγαίνομε', 'πηγαίνουμε']"""
