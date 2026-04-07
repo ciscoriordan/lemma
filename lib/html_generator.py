@@ -13,7 +13,7 @@ import time
 from lib.frequency_ranker import FrequencyRanker
 
 
-MAX_INFLECTIONS = 30
+MAX_INFLECTIONS = 50
 
 ACCENT_FROM = 'άέήίόύώΐΰϊϋΆΈΉΊΌΎΏ'
 ACCENT_TO   = 'αεηιουωιυιυαεηιουω'
@@ -311,10 +311,9 @@ class HtmlGenerator:
         all_variations = capped_forms
 
         escaped_word = _escape_html(word)
-        anchor = f'<a id="hw_{escaped_word}"></a>' if self.generator.enable_links else ''
         io.write(f"""\
 <idx:entry name="default" scriptable="yes" spell="yes">
-  <idx:short>{anchor}
+  <idx:short>
     <idx:orth value="{escaped_word}"><b>{escaped_word}</b>
 """)
 
@@ -327,6 +326,10 @@ class HtmlGenerator:
 
         io.write("    </idx:orth>\n")
         io.write("  </idx:short>\n")
+
+        # Add anchor for cross-reference links (after idx:short to avoid rendering issues)
+        if self.generator.enable_links:
+            io.write(f'  <a id="hw_{escaped_word}"></a>\n')
 
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
