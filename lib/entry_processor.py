@@ -453,6 +453,9 @@ class EntryProcessor:
                 continue
 
             for entry in entries_list:
+                # Skip form-of entries - their inflections belong on the real entry
+                if entry.get('form_of_targets'):
+                    continue
                 if entry.get('inflections') is None:
                     entry['inflections'] = []
                 before = len(entry['inflections'])

@@ -282,14 +282,20 @@ class HtmlGenerator:
         # Limit inflections to reduce complexity
         max_inflections = self.generator.max_inflections or MAX_INFLECTIONS
 
+        # Skip inflections for pure form-of entries (all sub-entries have form_of_targets).
+        # This prevents form-of entries from stealing lookups away from the
+        # real definition entry (e.g. ποτίζομαι stealing ποτισμένος from ποτίζω).
+        is_pure_form_of = all(e.get('form_of_targets') for e in entries)
+
         # Combine all inflections from all entries for this word
         all_inflections = []
         seen = set()
-        for e in entries:
-            for inf in (e.get('inflections') or []):
-                if inf not in seen:
-                    seen.add(inf)
-                    all_inflections.append(inf)
+        if not is_pure_form_of:
+            for e in entries:
+                for inf in (e.get('inflections') or []):
+                    if inf not in seen:
+                        seen.add(inf)
+                        all_inflections.append(inf)
 
         # Filter out multi-word inflections (containing spaces)
         single_word_inflections = [inf for inf in all_inflections if ' ' not in inf]
@@ -300,15 +306,15 @@ class HtmlGenerator:
             for e in entries
         )
 
-        if is_proper_noun:
+        if is_pure_form_of:
+            all_variations = []
+        elif is_proper_noun:
             # For proper nouns, keep original order
-            capped_forms = single_word_inflections[:max_inflections]
+            all_variations = single_word_inflections[:max_inflections]
         elif self._use_ranked_forms:
-            capped_forms = self._select_ranked_inflections(word, single_word_inflections, max_inflections)
+            all_variations = self._select_ranked_inflections(word, single_word_inflections, max_inflections)
         else:
-            capped_forms = self._rank_inflections(single_word_inflections)[:max_inflections]
-
-        all_variations = capped_forms
+            all_variations = self._rank_inflections(single_word_inflections)[:max_inflections]
 
         escaped_word = _escape_html(word)
         io.write(f"""\
