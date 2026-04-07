@@ -27,10 +27,12 @@ class GreekDictionaryGenerator:
         self.max_inflections = max_inflections
         self.enable_links = enable_links
         self.enable_etymology = enable_etymology
+        self.is_full_build = enable_links or enable_etymology
         self.entries = {}
         self.extraction_date = None
         self.download_date = time.strftime("%Y%m%d")
-        self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}"
+        self._build_tag = "" if self.is_full_build else "_basic"
+        self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}{self._build_tag}"
         self.dilemma_inflections = None
 
         # Ensure download_date is set
@@ -83,7 +85,7 @@ class GreekDictionaryGenerator:
 
         if actual_date != self.download_date:
             self.download_date = actual_date
-            self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}"
+            self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}{self._build_tag}"
             print(f"Updated download date to: {self.download_date}")
 
         if not success:

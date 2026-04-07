@@ -297,15 +297,6 @@ class HtmlGenerator:
         io.write("    </idx:orth>\n")
         io.write("  </idx:short>\n")
 
-        # Collect all form_of targets across entries for this word
-        all_form_of_targets = []
-        form_of_seen = set()
-        for e in entries:
-            for t in (e.get('form_of_targets') or []):
-                if t not in form_of_seen and t != word:
-                    form_of_seen.add(t)
-                    all_form_of_targets.append(t)
-
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
             # Show head template expansion for full builds
@@ -416,14 +407,6 @@ class HtmlGenerator:
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <hr />\n")
 
-        # Add cross-references for form_of targets that are headwords
-        for target in all_form_of_targets:
-            if target in self.entries:
-                if self.generator.enable_links:
-                    io.write(f"  <p class='def'><i>see also</i> <a href=\"lookup:{_escape_html(target)}\">{_escape_html(target)}</a></p>\n")
-                else:
-                    io.write(f"  <p class='def'><i>see also</i> {_escape_html(target)}</p>\n")
-
         io.write("""\
 </idx:entry>
 <hr/>
@@ -452,7 +435,7 @@ class HtmlGenerator:
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
   </head>
   <body>
-    <h1>Lemma Greek Dictionary</h1>
+    <h1>Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary</h1>
     <h3>From {source_desc}</h3>
     <h3>A Lemma Project</h3>
     <p>{date_info}</p>
@@ -499,7 +482,7 @@ class HtmlGenerator:
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
   </head>
   <body>
-    <h2>How to Use Lemma Greek Dictionary</h2>
+    <h2>How to Use Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary</h2>
     <p>This is a {dict_type} dictionary with Modern Greek words from {source_desc} Wiktionary.</p>
     <h3>Features:</h3>
     <ul>
@@ -511,7 +494,7 @@ class HtmlGenerator:
     <ol>
       <li>Look up any Greek word in your book</li>
       <li>Tap the dictionary name in the popup</li>
-      <li>Select "Lemma Greek Dictionary"</li>
+      <li>Select "Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary"</li>
     </ol>
   </body>
 </html>
@@ -521,15 +504,17 @@ class HtmlGenerator:
 
     def _create_opf_file(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
+        edition = "" if self._is_full_build else " Basic"
 
         unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
+        display_title = f"Lemma Greek{edition} Dictionary {source_name.upper()}"
 
         date_str = self.generator.extraction_date or self.generator.download_date
         title_with_date = f"{display_title} ({date_str})"
         out_lang = 'en' if self.generator.source_lang == 'en' else 'el'
 
-        opf_filename = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}.opf"
+        build_tag = "" if self._is_full_build else "_basic"
+        opf_filename = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}{build_tag}.opf"
 
         content = f"""\
 <?xml version="1.0"?>
@@ -584,8 +569,9 @@ class HtmlGenerator:
 
     def _create_toc_ncx(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
+        edition = "" if self._is_full_build else " Basic"
         unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
+        display_title = f"Lemma Greek{edition} Dictionary {source_name.upper()}"
 
         content = f"""\
 <?xml version="1.0" encoding="UTF-8"?>

@@ -25,7 +25,7 @@ A comprehensive Greek dictionary generator for Kindle e-readers, supporting both
 1. **Open any Greek text** on your Kindle
 2. **Select a Greek word** to look up
 3. **Tap the dictionary name** at the bottom of the popup
-4. **Select "Lemma Greek Dictionary"** from the list
+4. **Select "Lemma Greek Basic Dictionary"** from the list
 5. The dictionary is now your default for Greek lookups
 
 ## Pre-built Dictionaries
@@ -34,11 +34,11 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 
 ### Greek-English Dictionary
 
-- `lemma_greek_en_[date].mobi` - MOBI for sideloading (generated with `-m` flag)
+- `lemma_greek_en_[date]_basic.mobi` - MOBI for sideloading (generated with `-m` flag)
 
 ### Greek-Greek (Monolingual) Dictionary
 
-- `lemma_greek_el_[date].mobi` - MOBI for sideloading (generated with `-m` flag)
+- `lemma_greek_el_[date]_basic.mobi` - MOBI for sideloading (generated with `-m` flag)
 
 ## Features
 
@@ -46,8 +46,6 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/fcsriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
 - **Pre-Ranked Inflections**: When [Dilemma](https://github.com/fcsriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
-- **Cross-References**: Entries that are forms of other headwords include "see also" references, optionally as clickable links (`--links`)
-- **Etymology Information**: Includes word origins where available (English dictionary, enabled with `--etymology`)
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
 
@@ -85,15 +83,6 @@ python3 greek_kindle_dictionary.py -m
 
 # Generate a test dictionary with only 10% of entries
 python3 greek_kindle_dictionary.py -l 10
-
-# Enable clickable cross-references between entries
-python3 greek_kindle_dictionary.py --links
-
-# Include etymology information (English dictionary)
-python3 greek_kindle_dictionary.py --etymology
-
-# Combine options
-python3 greek_kindle_dictionary.py -s el -l 5 -m --links
 ```
 
 ### Command Line Arguments
@@ -102,8 +91,6 @@ python3 greek_kindle_dictionary.py -s el -l 5 -m --links
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
 - `-m, --mobi`: Also generate `.mobi` via kindling (for sideloading)
 - `-i, --inflections N`: Max inflections per headword (default: 30)
-- `--links`: Enable clickable cross-references between entries (default: off)
-- `--etymology`: Include etymology information in entries (default: off)
 - `-h, --help`: Show help message
 
 ## Data Sources
