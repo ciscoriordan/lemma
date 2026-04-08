@@ -43,9 +43,9 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 ## Features
 
 - **Bilingual & Monolingual Support**: Generate Greek-English or Greek-Greek dictionaries
-- **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/fcsriordan/dilemma) when available
+- **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/ciscoriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
-- **Pre-Ranked Inflections**: When [Dilemma](https://github.com/fcsriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
+- **Pre-Ranked Inflections**: When [Dilemma](https://github.com/ciscoriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
 
@@ -54,14 +54,14 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 ### Prerequisites
 
 - Python 3.8+
-- [kindling](https://pypi.org/project/kindling/) (optional, only needed for `.mobi` generation with `-m` flag): `pip install kindling`
+- [kindling](https://github.com/ciscoriordan/kindling) (optional, only needed for `.mobi` generation with `-m` flag)
 - Works on macOS, Linux, and Windows
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/fr2019/lemma.git
+git clone https://github.com/ciscoriordan/lemma.git
 cd lemma
 
 # Run the generator (produces EPUB by default)
@@ -98,7 +98,7 @@ python3 greek_kindle_dictionary.py -l 10
 The dictionaries are built from:
 
 - **Primary Source**: [Kaikki.org](https://kaikki.org/) - Machine-readable Wiktionary data (definitions, POS, etymology)
-- **Inflection Data** (optional): [Dilemma](https://github.com/fcsriordan/dilemma) - Greek lemmatizer with 2.76M Modern Greek form-to-lemma mappings compiled from English and Greek Wiktionary, treebank corpora, and LSJ expansion
+- **Inflection Data** (optional): [Dilemma](https://github.com/ciscoriordan/dilemma) - Greek lemmatizer with 2.76M Modern Greek form-to-lemma mappings compiled from English and Greek Wiktionary, treebank corpora, and LSJ expansion
 - **Ranked Inflections** (optional): Dilemma's `mg_ranked_forms.json` from the [`ciscoriordan/dilemma-data`](https://huggingface.co/datasets/ciscoriordan/dilemma-data) HuggingFace dataset provides pre-ranked, case-deduplicated inflection lists per lemma. Downloaded automatically if `huggingface_hub` is installed.
 - **Frequency Data** (fallback): [FrequencyWords](https://github.com/hermitdave/FrequencyWords) - Word frequency lists derived from OpenSubtitles 2018 corpus, used to rank inflections when pre-ranked forms are not available
 - **Fallback Data**: Pre-downloaded JSONL files in the repository
@@ -128,8 +128,8 @@ This cross-references the two data sources, uses corpus frequency as a tiebreake
 
 ### Related Projects
 
-- [Dilemma](https://github.com/fcsriordan/dilemma) - Greek lemmatizer. Provides the inflection lookup tables used by Lemma.
-- [Opla](https://github.com/fcsriordan/opla) - Greek POS tagger and dependency parser, built on Dilemma for lemmatization.
+- [Dilemma](https://github.com/ciscoriordan/dilemma) - Greek lemmatizer. Provides the inflection lookup tables used by Lemma.
+- [Opla](https://github.com/ciscoriordan/opla) - Greek POS tagger and dependency parser, built on Dilemma for lemmatization.
 
 ## Dictionary Content
 
@@ -172,24 +172,21 @@ The following are filtered out as they cannot be selected in Kindle texts:
 
 ### Building Issues
 
-- **kindling not found**: Only needed for `.mobi` generation (`-m` flag). Install with `pip install kindling`
+- **kindling not found**: Only needed for `.mobi` generation (`-m` flag). Download from [kindling releases](https://github.com/ciscoriordan/kindling/releases)
 - **Download freezes**: Use pre-downloaded data files from the repository
 - **Memory issues**: Use the `-l` option to build smaller test dictionaries first
 
 ## License
 
-- **Code**: [MIT License](LICENSE)
+MIT - Copyright (c) 2026 Francisco Riordan
+
 - **Dictionary content and data**: [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/) (derived from Wiktionary)
 - **Frequency data** (`data/el_full.txt`): [MIT License](https://github.com/hermitdave/FrequencyWords/blob/master/LICENSE) (from FrequencyWords/OpenSubtitles)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Acknowledgments
 
 - Wiktionary contributors for the source data
 - [Kaikki.org](https://kaikki.org/) for providing machine-readable Wiktionary dumps
-- [Dilemma](https://github.com/fcsriordan/dilemma) for Greek lemmatization and inflection data
+- [Dilemma](https://github.com/ciscoriordan/dilemma) for Greek lemmatization and inflection data
+- [Kindling](https://github.com/ciscoriordan/kindling) for MOBI generation
 - [FrequencyWords](https://github.com/hermitdave/FrequencyWords) for corpus frequency data (MIT license)
-- [Opla](https://github.com/fcsriordan/opla) for Greek NLP infrastructure
