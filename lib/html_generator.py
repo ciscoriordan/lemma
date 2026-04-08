@@ -594,10 +594,10 @@ class HtmlGenerator:
         edition_tag = "" if self._is_full_build else "Basic"
 
         unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek{edition} Dictionary {source_name.upper()}"
+        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
 
         date_str = self.generator.extraction_date or self.generator.download_date
-        title_with_date = f"{display_title} ({date_str})"
+        title_with_date = f"{display_title} ({date_str}){edition}"
         out_lang = 'en' if self.generator.source_lang == 'en' else 'el'
 
         build_tag = "" if self._is_full_build else "_basic"
@@ -659,7 +659,7 @@ class HtmlGenerator:
         edition = "" if self._is_full_build else " Basic"
         edition_tag = "" if self._is_full_build else "Basic"
         unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek{edition} Dictionary {source_name.upper()}"
+        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
 
         content = f"""\
 <?xml version="1.0" encoding="UTF-8"?>
