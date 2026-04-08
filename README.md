@@ -4,7 +4,7 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="lemma_banner.png">
 </p>
 
-A comprehensive Greek dictionary generator for Kindle e-readers, supporting both Greek-English and Greek-Greek (monolingual) dictionaries. 80K headwords, 486K inflected form lookups, built from Wiktionary data using [kindling](https://github.com/ciscoriordan/kindling).
+A Greek-English dictionary for Kindle e-readers. 80K headwords, 486K inflected form lookups, built from Wiktionary data using [kindling](https://github.com/ciscoriordan/kindling).
 
 ![Dictionary lookup on Kindle](https://github.com/user-attachments/assets/b4720bd2-b3d6-4bbc-9295-5e0944cd0393)
 
@@ -40,13 +40,7 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 
 - `lemma_greek_en_[date]_basic.mobi` - MOBI for sideloading (generated with `-m` flag)
 
-### Greek-Greek (Monolingual) Dictionary
-
-- `lemma_greek_el_[date]_basic.mobi` - MOBI for sideloading (generated with `-m` flag)
-
 ## Features
-
-- **Bilingual & Monolingual Support**: Generate Greek-English or Greek-Greek dictionaries
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/ciscoriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
 - **Pre-Ranked Inflections**: When [Dilemma](https://github.com/ciscoriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
@@ -76,11 +70,8 @@ python3 greek_kindle_dictionary.py [options]
 ### Options
 
 ```bash
-# Generate Greek-English dictionary (default, EPUB output)
+# Generate dictionary (EPUB output)
 python3 greek_kindle_dictionary.py
-
-# Generate Greek-Greek monolingual dictionary
-python3 greek_kindle_dictionary.py -s el
 
 # Also generate .mobi for sideloading
 python3 greek_kindle_dictionary.py -m
@@ -91,10 +82,9 @@ python3 greek_kindle_dictionary.py -l 10
 
 ### Command Line Arguments
 
-- `-s, --source LANG`: Source Wiktionary language ('en' for English or 'el' for Greek)
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
 - `-m, --mobi`: Also generate `.mobi` via kindling (for sideloading)
-- `-i, --inflections N`: Max inflections per headword (default: 30)
+- `-i, --inflections N`: Max inflections per headword (default: 50)
 - `-h, --help`: Show help message
 
 ## Data Sources
@@ -141,7 +131,7 @@ The dictionaries include:
 
 - **Headwords**: Main dictionary entries
 - **Inflected Forms**: Automatically redirect to their lemmas
-- **Part of Speech**: Grammatical category (abbreviated in Greek for monolingual)
+- **Part of Speech**: Grammatical category
 - **Definitions**: Multiple numbered definitions where applicable
 - **Etymology**: Word origins and history (English dictionary only)
 - **Domain Tags**: Subject area indicators (e.g., γλωσσολογία, γραμματική)

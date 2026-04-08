@@ -45,7 +45,7 @@ class MobiGenerator:
 
         if result.returncode == 0 and os.path.exists(mobi_path):
             print(f"\nSuccess! Generated {mobi_filename}")
-            dict_type = 'Greek-English' if self.generator.source_lang == 'en' else 'Greek-Greek (monolingual)'
+            dict_type = 'Greek-English'
             print(f"Dictionary type: {dict_type}")
             size_mb = os.path.getsize(mobi_path) / 1024 / 1024
             print(f"File size: {size_mb:.2f} MB")
