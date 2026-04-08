@@ -23,4 +23,4 @@ processed_entries_*.json
 # Temporary files
 *.tmp
 *.bak
-*~
+*~__pycache__/
