@@ -329,10 +329,12 @@ class HtmlGenerator:
         if self.generator.enable_links:
             io.write(f'  <a id="hw_{escaped_word}"></a>\n')
 
+        is_form_of_entry = all(e.get('form_of_targets') for e in entries)
+
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
-            # Show head template expansion for full builds
-            if self._is_full_build:
+            # Show head template expansion for full builds (skip for form-of entries)
+            if self._is_full_build and not is_form_of_entry:
                 for e in entries:
                     head_exp = e.get('head_expansion')
                     if head_exp:
@@ -391,8 +393,8 @@ class HtmlGenerator:
                     io.write("  <hr />\n")
         else:
             # Keep full format for English
-            # Show head template expansion for full builds
-            if self._is_full_build:
+            # Show head template expansion for full builds (skip for form-of entries)
+            if self._is_full_build and not is_form_of_entry:
                 for e in entries:
                     head_exp = e.get('head_expansion')
                     if head_exp:
@@ -438,6 +440,24 @@ class HtmlGenerator:
 
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <hr />\n")
+
+        # For form-of entries, inline the parent headword's definitions
+        is_form_of = all(e.get('form_of_targets') for e in entries)
+        if is_form_of:
+            targets_seen = set()
+            for e in entries:
+                for target in (e.get('form_of_targets') or []):
+                    if target in targets_seen or target not in self.entries:
+                        continue
+                    targets_seen.add(target)
+                    parent_entries = self.entries[target]
+                    io.write(f"  <hr/>\n")
+                    io.write(f"  <p><b>{_escape_html(target)}</b></p>\n")
+                    for pe in parent_entries:
+                        pos_display = self._format_pos(pe.get('pos'))
+                        io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
+                        for d in pe.get('definitions', [])[:5]:
+                            io.write(f"  <p class='def'>{self._linkify_definition(d)}</p>\n")
 
         io.write("""\
 </idx:entry>
