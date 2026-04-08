@@ -211,8 +211,65 @@ class HtmlGenerator:
         # Remove non-Greek, non-Latin, non-digit characters
         return re.sub(r'[^\u0370-\u03FF\u1F00-\u1FFFA-Za-z0-9]', '', normalized)
 
+    def _merge_form_of_into_parents(self):
+        """Move pure form-of entries into their parent as iforms.
+
+        A pure form-of entry is one where all sub-entries have form_of_targets.
+        For single-parent cases, the word becomes an iform on the parent.
+        For multi-parent cases, pick the most frequent parent.
+        """
+        dilemma = self.generator.dilemma_inflections
+        freq = self.frequency_ranker
+
+        merged_count = 0
+        to_remove = []
+
+        for word, entries in self.entries.items():
+            if not all(e.get('form_of_targets') for e in entries):
+                continue
+
+            # Collect all unique targets that exist as headwords
+            targets = []
+            seen = set()
+            for e in entries:
+                for t in (e.get('form_of_targets') or []):
+                    if t not in seen and t in self.entries:
+                        targets.append(t)
+                        seen.add(t)
+
+            if not targets:
+                continue
+
+            # Pick the best parent by frequency
+            if len(targets) == 1:
+                best = targets[0]
+            else:
+                def parent_freq(t):
+                    if freq:
+                        return freq.frequency(t)
+                    return 0
+                best = max(targets, key=parent_freq)
+
+            # Add this word as an inflection on the parent entry
+            for pe in self.entries[best]:
+                if pe.get('inflections') is None:
+                    pe['inflections'] = []
+                if word not in pe['inflections']:
+                    pe['inflections'].append(word)
+
+            to_remove.append(word)
+            merged_count += 1
+
+        for word in to_remove:
+            del self.entries[word]
+
+        print(f"  Merged {merged_count} form-of entries into parent headwords")
+
     def _create_content_html(self):
         print("Creating content.html...")
+
+        # Merge pure form-of entries into their parents
+        self._merge_form_of_into_parents()
 
         # Sort keys only to avoid copying all entry data
         sorted_keys = sorted(self.entries.keys(), key=self._normalize_for_sorting)
@@ -329,12 +386,10 @@ class HtmlGenerator:
         if self.generator.enable_links:
             io.write(f'  <a id="hw_{escaped_word}"></a>\n')
 
-        is_form_of_entry = all(e.get('form_of_targets') for e in entries)
-
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
-            # Show head template expansion for full builds (skip for form-of entries)
-            if self._is_full_build and not is_form_of_entry:
+            # Show head template expansion for full builds
+            if self._is_full_build:
                 for e in entries:
                     head_exp = e.get('head_expansion')
                     if head_exp:
@@ -393,8 +448,8 @@ class HtmlGenerator:
                     io.write("  <hr />\n")
         else:
             # Keep full format for English
-            # Show head template expansion for full builds (skip for form-of entries)
-            if self._is_full_build and not is_form_of_entry:
+            # Show head template expansion for full builds
+            if self._is_full_build:
                 for e in entries:
                     head_exp = e.get('head_expansion')
                     if head_exp:
@@ -440,24 +495,6 @@ class HtmlGenerator:
 
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <hr />\n")
-
-        # For form-of entries, inline the parent headword's definitions
-        is_form_of = all(e.get('form_of_targets') for e in entries)
-        if is_form_of:
-            targets_seen = set()
-            for e in entries:
-                for target in (e.get('form_of_targets') or []):
-                    if target in targets_seen or target not in self.entries:
-                        continue
-                    targets_seen.add(target)
-                    parent_entries = self.entries[target]
-                    io.write(f"  <hr/>\n")
-                    io.write(f"  <p><b>{_escape_html(target)}</b></p>\n")
-                    for pe in parent_entries:
-                        pos_display = self._format_pos(pe.get('pos'))
-                        io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
-                        for d in pe.get('definitions', [])[:5]:
-                            io.write(f"  <p class='def'>{self._linkify_definition(d)}</p>\n")
 
         io.write("""\
 </idx:entry>
