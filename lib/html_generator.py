@@ -382,9 +382,6 @@ class HtmlGenerator:
         io.write("    </idx:orth>\n")
         io.write("  </idx:short>\n")
 
-        # Add anchor for cross-reference links (after idx:short to avoid rendering issues)
-        if self.generator.enable_links:
-            io.write(f'  <a id="hw_{escaped_word}"></a>\n')
 
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
@@ -445,7 +442,7 @@ class HtmlGenerator:
 
                 # Add separator between POS groups
                 if len(pos_order) > 1 and idx < len(pos_order) - 1:
-                    io.write("  <hr />\n")
+                    io.write("  <br/><br/>\n")
         else:
             # Keep full format for English
             # Show head template expansion for full builds
@@ -491,10 +488,10 @@ class HtmlGenerator:
 
                 etym = entry.get('etymology')
                 if etym and etym.strip() and self.generator.enable_etymology:
-                    io.write(f"  <hr/>\n  <p class='etym'><i>{_escape_html(etym)}</i></p>\n")
+                    io.write(f"  <br/><br/>\n  <p class='etym'><b>Etymology:</b></p>\n  <p class='etym'><i>{_escape_html(etym)}</i></p>\n")
 
                 if len(entries) > 1 and idx < len(entries) - 1:
-                    io.write("  <hr />\n")
+                    io.write("  <br/><br/>\n")
 
         io.write("""\
 </idx:entry>
