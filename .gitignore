@@ -23,4 +23,15 @@ processed_entries_*.json
 # Temporary files
 *.tmp
 *.bak
-*~__pycache__/
+*~
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Claude Code local settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
+
+# Kindle conversion logs
+dist/*-conversionLog.csv
