@@ -591,8 +591,9 @@ class HtmlGenerator:
     def _create_opf_file(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
         edition = "" if self._is_full_build else " Basic"
+        edition_tag = "" if self._is_full_build else "Basic"
 
-        unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}"
+        unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
         display_title = f"Lemma Greek{edition} Dictionary {source_name.upper()}"
 
         date_str = self.generator.extraction_date or self.generator.download_date
@@ -656,7 +657,8 @@ class HtmlGenerator:
     def _create_toc_ncx(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
         edition = "" if self._is_full_build else " Basic"
-        unique_id = f"LemmaGreek{source_name.upper().replace('-', '')}"
+        edition_tag = "" if self._is_full_build else "Basic"
+        unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
         display_title = f"Lemma Greek{edition} Dictionary {source_name.upper()}"
 
         content = f"""\
