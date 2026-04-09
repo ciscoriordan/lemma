@@ -72,7 +72,7 @@ KNOWN_LOOKUPS = [
     ("παιδιού", "παιδί", "genitive sg of 'child'"),
     ("παιδιά", "παιδί", "plural of 'child'"),
     ("χρόνου", "χρόνος", "genitive sg of 'year/time'"),
-    ("χρόνια", "χρόνος", "plural of 'year/time'"),
+    ("χρόνια", "χρόνια", "headword lookup 'years/ages' (also plural of χρόνος)"),
 
     # Adjective inflections
     ("καλή", "καλός", "feminine of 'good'"),
@@ -86,6 +86,14 @@ KNOWN_LOOKUPS = [
     ("καλός", "καλός", "headword self-lookup 'good'"),
 ]
 
+# Expected POS lines for basic builds - POS only, no gender info.
+# Each tuple: (headword, expected_pos_text, description)
+KNOWN_POS_FORMATS = [
+    ("θάλασσα", "noun", "basic POS for noun"),
+    ("σκύλος", "noun", "basic POS for noun"),
+    ("Ελλάδα", "name", "basic POS for proper noun"),
+]
+
 
 class DictionaryIndex:
     """Simulates Kindle's dictionary lookup index."""
@@ -95,6 +103,8 @@ class DictionaryIndex:
         self.index = {}
         self.headwords = set()
         self.total_inflections = 0
+        # headword -> list of POS line strings (text inside <p><i>...</i></p>)
+        self.pos_lines = {}
 
     def load_content_html(self, filepath):
         """Parse a content.html file and add entries to the index."""
@@ -109,6 +119,7 @@ class DictionaryIndex:
         orth_pattern = re.compile(r'<idx:orth\s+value="([^"]*)"')
         iform_pattern = re.compile(r'<idx:iform\s+value="([^"]*)"')
         def_pattern = re.compile(r"<p class='def'>(.*?)</p>")
+        pos_pattern = re.compile(r'<p><i>(.*?)</i></p>')
 
         for m in entry_pattern.finditer(content):
             entry_html = m.group(1)
@@ -119,6 +130,11 @@ class DictionaryIndex:
 
             headword = html.unescape(orth_match.group(1))
             self.headwords.add(headword)
+
+            # Extract POS lines
+            for pm in pos_pattern.finditer(entry_html):
+                pos_text = html.unescape(pm.group(1))
+                self.pos_lines.setdefault(headword, []).append(pos_text)
 
             # Extract first definition for preview
             defs = def_pattern.findall(entry_html)
@@ -234,6 +250,46 @@ def run_tests(index):
     return failed == 0
 
 
+def run_pos_tests(index, cases=None):
+    """Check POS line formatting against expected values."""
+    if cases is None:
+        cases = KNOWN_POS_FORMATS
+    passed = 0
+    failed = 0
+    skipped = 0
+
+    print(f"\nRunning {len(cases)} POS format tests...\n")
+
+    for entry in cases:
+        headword, expected_pos = entry[0], entry[1]
+        desc = entry[2] if len(entry) > 2 else ""
+
+        if headword not in index.headwords:
+            skipped += 1
+            print(f"  SKIP  {headword} ({desc})")
+            print(f"        headword not in dictionary")
+            continue
+
+        actual_lines = index.pos_lines.get(headword, [])
+        if expected_pos in actual_lines:
+            passed += 1
+        else:
+            failed += 1
+            actual = actual_lines[0] if actual_lines else "(no POS line)"
+            print(f"  FAIL  {headword}: expected '{expected_pos}'")
+            print(f"        got: '{actual}' ({desc})")
+
+    total_run = passed + failed
+    print(f"\nPOS format results: {passed}/{total_run} passed", end="")
+    if skipped:
+        print(f", {skipped} skipped", end="")
+    if failed:
+        print(f", {failed} FAILED", end="")
+    print()
+
+    return failed == 0
+
+
 def interactive_mode(index):
     """Interactive lookup - type Greek words to test."""
     print("\nInteractive lookup mode. Type a Greek word to look it up.")
@@ -290,6 +346,7 @@ def main():
           f"in {elapsed:.1f}s")
 
     all_passed = run_tests(index)
+    all_passed = run_pos_tests(index) and all_passed
 
     if interactive:
         interactive_mode(index)

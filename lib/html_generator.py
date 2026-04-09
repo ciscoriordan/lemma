@@ -38,6 +38,8 @@ POS_MAP = {
 # These are either shown in the head line or as POS section headers
 _STRIP_TAGS = {'masculine', 'feminine', 'neuter', 'participle', 'singular', 'plural'}
 
+_GENDER_EXPAND = {'m': 'masculine', 'f': 'feminine', 'n': 'neuter'}
+
 
 class HtmlGenerator:
     _shared_frequency_ranker = None
@@ -390,17 +392,6 @@ class HtmlGenerator:
 
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
-            # Show gender/form info from head_expansion for full builds,
-            # but strip the headword repetition and transliteration
-            if self._is_full_build:
-                for e in entries:
-                    head_exp = e.get('head_expansion')
-                    if head_exp:
-                        head_info = _strip_head_expansion(head_exp, word)
-                        if head_info:
-                            io.write(f"  <p><i>{_escape_html(head_info)}</i></p>\n")
-                        break  # Only show the first one
-
             # Combine all definitions by POS, detecting participles
             pos_groups = {}
             pos_order = []
@@ -434,6 +425,10 @@ class HtmlGenerator:
                         effective_pos = 'participle'
 
                 pos_display = self._format_pos(effective_pos)
+                if self._is_full_build:
+                    head_info = self._get_head_info_for_pos(pos_entries, word)
+                    if head_info:
+                        pos_display = f"{pos_display}, {head_info}"
                 io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
 
                 # Limit definitions, stripping redundant qualifier tags
@@ -460,17 +455,6 @@ class HtmlGenerator:
                     io.write("  <br/><br/>\n")
         else:
             # Full format for English Wiktionary source
-            # Show gender/form info from head_expansion for full builds,
-            # but strip the headword repetition and transliteration
-            if self._is_full_build:
-                for e in entries:
-                    head_exp = e.get('head_expansion')
-                    if head_exp:
-                        head_info = _strip_head_expansion(head_exp, word)
-                        if head_info:
-                            io.write(f"  <p><i>{_escape_html(head_info)}</i></p>\n")
-                        break  # Only show the first one
-
             for idx, entry in enumerate(entries):
                 pos = entry.get('pos', 'unknown')
                 defs = entry.get('definitions', [])
@@ -483,6 +467,10 @@ class HtmlGenerator:
                         effective_pos = 'participle'
 
                 pos_display = self._format_pos(effective_pos)
+                if self._is_full_build:
+                    head_info = self._get_head_info_for_pos([entry], word)
+                    if head_info:
+                        pos_display = f"{pos_display}, {head_info}"
                 io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
 
                 if len(defs) > 1:
@@ -525,6 +513,16 @@ class HtmlGenerator:
 </idx:entry>
 <hr/>
 """)
+
+    def _get_head_info_for_pos(self, pos_entries, word):
+        """Extract gender and variant info from head_expansion for POS line."""
+        for e in pos_entries:
+            head_exp = e.get('head_expansion')
+            if head_exp:
+                stripped = _strip_head_expansion(head_exp, word)
+                if stripped:
+                    return _format_head_for_pos(stripped)
+        return None
 
     def _format_pos(self, pos):
         pos_display = pos or "unknown"
@@ -748,6 +746,47 @@ def _strip_head_expansion(head_exp, word):
     # Remove transliteration "(latintext)" at the start
     text = re.sub(r'^\([A-Za-z\u00C0-\u024F\s]+\)\s*', '', text)
     return text.strip()
+
+
+def _format_head_for_pos(stripped):
+    """Format stripped head_expansion for combining with POS display.
+
+    Input:  "f (plural θάλασσες)"
+    Output: "feminine (plural θάλασσες)"
+
+    Input:  "m (feminine χτυπημένη, neuter χτυπημένο)"
+    Output: "masculine (feminine χτυπημένη, neuter χτυπημένο)"
+
+    Returns None if the pattern is not recognized (e.g. unknown gender '?').
+    """
+    if not stripped:
+        return None
+
+    m = re.match(
+        r'^([mfn](?:\s+or\s+[mfn])*)'  # gender code(s)
+        r'(\s+(?:pl|sg))?'              # optional number
+        r'(\s+\(.*\))?'                 # optional parenthetical
+        r'\s*$',
+        stripped
+    )
+    if not m:
+        return None
+
+    genders = m.group(1)
+    number = (m.group(2) or '').strip()
+    parens = (m.group(3) or '').strip()
+
+    for abbrev, full in _GENDER_EXPAND.items():
+        genders = re.sub(rf'\b{abbrev}\b', full, genders)
+
+    parts = [genders]
+    if number:
+        parts.append('plural' if number == 'pl' else 'singular')
+    result = ' '.join(parts)
+    if parens:
+        result += ' ' + parens
+
+    return result
 
 
 def _def_has_tag(definition, tag):
