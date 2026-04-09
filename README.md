@@ -9,7 +9,7 @@ A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K infl
 | [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
 |:---|:---|
 | ![Basic dictionary](images/screenshot_basic.jpg) | ![Pro dictionary](images/screenshot_pro.jpg) |
-| Definitions<br>Inflections<br>Monotonic | Definitions<br>Inflections<br>Gender and variants<br>Etymology<br>Examples<br>Monotonic<br>Polytonic |
+| Definitions<br>Inflections<br>Monotonic | Definitions<br>Inflections<br>Monotonic<br>Polytonic<br>Gender and variants<br>Etymology<br>Examples |
 
 ## Quick Install
 
