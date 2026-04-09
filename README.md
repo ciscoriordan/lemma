@@ -4,7 +4,7 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
 </p>
 
-A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling).
+A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, 7,000x faster kindlegen replacement).
 
 | [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
 |:---|:---|
@@ -133,6 +133,7 @@ This cross-references the two data sources, uses corpus frequency as a tiebreake
 
 ### Related Projects
 
+- [Kindling](https://github.com/ciscoriordan/kindling) - MOBI generator for Kindle dictionaries, books, and comics.
 - [Dilemma](https://github.com/ciscoriordan/dilemma) - Greek lemmatizer. Provides the inflection lookup tables used by Lemma.
 - [Opla](https://github.com/ciscoriordan/opla) - Greek POS tagger and dependency parser, built on Dilemma for lemmatization.
 
