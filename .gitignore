@@ -33,5 +33,6 @@ __pycache__/
 .claude/settings.local.json
 .claude/worktrees/
 
-# Kindle conversion logs
-dist/*-conversionLog.csv
+# Build outputs
+dist/
+iliad_polylas/
