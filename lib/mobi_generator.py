@@ -21,7 +21,7 @@ class MobiGenerator:
         self._run_generation()
 
     def _run_generation(self):
-        kindling = shutil.which('kindling')
+        kindling = shutil.which('kindling-cli')
 
         if not kindling:
             print("\nkindling not found on PATH. Please install it from:")
