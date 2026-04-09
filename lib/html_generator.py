@@ -22,6 +22,7 @@ _ACCENT_TABLE = str.maketrans(ACCENT_FROM, ACCENT_TO)
 POS_MAP = {
     "noun": "ουσ.",
     "verb": "ρ.",
+    "participle": "μτχ.",
     "adj": "επίθ.",
     "adjective": "επίθ.",
     "adv": "επίρρ.",
@@ -32,6 +33,10 @@ POS_MAP = {
     "proper noun": "κύρ.όν.",
     "article": "άρθρ.",
 }
+
+# Tags to strip from definition qualifiers (gender, participle, etc.)
+# These are either shown in the head line or as POS section headers
+_STRIP_TAGS = {'masculine', 'feminine', 'neuter', 'participle', 'singular', 'plural'}
 
 
 class HtmlGenerator:
@@ -385,15 +390,18 @@ class HtmlGenerator:
 
         # Simplify entries for Greek to reduce size
         if self.generator.source_lang == 'el':
-            # Show head template expansion for full builds
+            # Show gender/form info from head_expansion for full builds,
+            # but strip the headword repetition and transliteration
             if self._is_full_build:
                 for e in entries:
                     head_exp = e.get('head_expansion')
                     if head_exp:
-                        io.write(f"  <p><i>{_escape_html(head_exp)}</i></p>\n")
+                        head_info = _strip_head_expansion(head_exp, word)
+                        if head_info:
+                            io.write(f"  <p><i>{_escape_html(head_info)}</i></p>\n")
                         break  # Only show the first one
 
-            # Combine all definitions by POS
+            # Combine all definitions by POS, detecting participles
             pos_groups = {}
             pos_order = []
             for e in entries:
@@ -405,8 +413,6 @@ class HtmlGenerator:
 
             for idx, pos in enumerate(pos_order):
                 pos_entries = pos_groups[pos]
-                pos_display = self._format_pos(pos)
-                io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
 
                 # Combine all definitions and examples for this POS
                 all_definitions = []
@@ -418,16 +424,25 @@ class HtmlGenerator:
                         if d not in def_seen:
                             def_seen.add(d)
                             all_definitions.append(d)
-                            # Keep examples aligned with definitions
                             ex = entry_examples[i] if i < len(entry_examples) else None
                             all_examples.append(ex)
 
-                # Limit definitions
+                # Detect if all definitions are participles, and use that as POS
+                effective_pos = pos
+                if pos == 'verb' and all_definitions:
+                    if all(_def_has_tag(d, 'participle') for d in all_definitions):
+                        effective_pos = 'participle'
+
+                pos_display = self._format_pos(effective_pos)
+                io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
+
+                # Limit definitions, stripping redundant qualifier tags
                 for def_idx, definition in enumerate(all_definitions[:5]):
+                    clean_def = _strip_def_qualifiers(definition)
                     if len(all_definitions) > 1:
-                        io.write(f"  <p class='def'>{def_idx + 1}. {self._linkify_definition(definition)}</p>\n")
+                        io.write(f"  <p class='def'>{def_idx + 1}. {self._linkify_definition(clean_def)}</p>\n")
                     else:
-                        io.write(f"  <p class='def'>{self._linkify_definition(definition)}</p>\n")
+                        io.write(f"  <p class='def'>{self._linkify_definition(clean_def)}</p>\n")
 
                     # Show example for full builds
                     if self._is_full_build and def_idx < len(all_examples):
@@ -444,24 +459,36 @@ class HtmlGenerator:
                 if len(pos_order) > 1 and idx < len(pos_order) - 1:
                     io.write("  <br/><br/>\n")
         else:
-            # Keep full format for English
-            # Show head template expansion for full builds
+            # Full format for English Wiktionary source
+            # Show gender/form info from head_expansion for full builds,
+            # but strip the headword repetition and transliteration
             if self._is_full_build:
                 for e in entries:
                     head_exp = e.get('head_expansion')
                     if head_exp:
-                        io.write(f"  <p><i>{_escape_html(head_exp)}</i></p>\n")
+                        head_info = _strip_head_expansion(head_exp, word)
+                        if head_info:
+                            io.write(f"  <p><i>{_escape_html(head_info)}</i></p>\n")
                         break  # Only show the first one
 
             for idx, entry in enumerate(entries):
-                pos_display = self._format_pos(entry.get('pos'))
-                io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
-
+                pos = entry.get('pos', 'unknown')
                 defs = entry.get('definitions', [])
                 entry_examples = entry.get('examples') or []
+
+                # Detect participle: if all defs have participle tag, use that as POS
+                effective_pos = pos
+                if pos == 'verb' and defs:
+                    if all(_def_has_tag(d, 'participle') for d in defs):
+                        effective_pos = 'participle'
+
+                pos_display = self._format_pos(effective_pos)
+                io.write(f"  <p><i>{_escape_html(pos_display)}</i></p>\n")
+
                 if len(defs) > 1:
                     for def_idx, definition in enumerate(defs):
-                        io.write(f"  <p class='def'>{def_idx + 1}. {self._linkify_definition(definition)}</p>\n")
+                        clean_def = _strip_def_qualifiers(definition)
+                        io.write(f"  <p class='def'>{def_idx + 1}. {self._linkify_definition(clean_def)}</p>\n")
                         # Show example for full builds
                         if self._is_full_build and def_idx < len(entry_examples):
                             ex = entry_examples[def_idx]
@@ -474,7 +501,8 @@ class HtmlGenerator:
                                     io.write(f"  <p class='ex'>{ex_text}</p>\n")
                 else:
                     for def_idx, definition in enumerate(defs):
-                        io.write(f"  <p class='def'>{self._linkify_definition(definition)}</p>\n")
+                        clean_def = _strip_def_qualifiers(definition)
+                        io.write(f"  <p class='def'>{self._linkify_definition(clean_def)}</p>\n")
                         # Show example for full builds
                         if self._is_full_build and def_idx < len(entry_examples):
                             ex = entry_examples[def_idx]
@@ -702,3 +730,49 @@ def _escape_html(text):
     if not text:
         return ""
     return html.escape(str(text))
+
+
+def _strip_head_expansion(head_exp, word):
+    """Strip headword repetition and transliteration from head_expansion.
+
+    Input:  "χτυπημένος • (chtypiménos) m (feminine χτυπημένη, neuter χτυπημένο)"
+    Output: "m (feminine χτυπημένη, neuter χτυπημένο)"
+    """
+    text = head_exp
+    # Remove "word • " prefix
+    bullet_pos = text.find('•')
+    if bullet_pos >= 0:
+        text = text[bullet_pos + 1:].strip()
+    elif text.startswith(word):
+        text = text[len(word):].strip()
+    # Remove transliteration "(latintext)" at the start
+    text = re.sub(r'^\([A-Za-z\u00C0-\u024F\s]+\)\s*', '', text)
+    return text.strip()
+
+
+def _def_has_tag(definition, tag):
+    """Check if a definition string starts with a qualifier containing the tag."""
+    m = re.match(r'^\(([^)]+)\)', definition)
+    if not m:
+        return False
+    tags = [t.strip().lower() for t in m.group(1).split(',')]
+    return tag in tags
+
+
+def _strip_def_qualifiers(definition):
+    """Strip redundant gender/participle qualifiers from definition text.
+
+    Input:  "(masculine, participle) beaten, struck"
+    Output: "beaten, struck"
+
+    Only strips tags in _STRIP_TAGS. If there are other tags, keeps them.
+    """
+    m = re.match(r'^\(([^)]+)\)\s*', definition)
+    if not m:
+        return definition
+    tags = [t.strip() for t in m.group(1).split(',')]
+    remaining = [t for t in tags if t.lower() not in _STRIP_TAGS]
+    rest = definition[m.end():]
+    if remaining:
+        return f"({', '.join(remaining)}) {rest}"
+    return rest
