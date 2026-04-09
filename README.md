@@ -4,7 +4,7 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="lemma_banner.png">
 </p>
 
-A Greek-English dictionary for Kindle e-readers. 80K headwords, 486K inflected form lookups, built from Wiktionary data using [kindling](https://github.com/ciscoriordan/kindling).
+A Greek-English dictionary for Kindle e-readers. 80K headwords, 486K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling).
 
 ![Dictionary lookup on Kindle](https://github.com/user-attachments/assets/b4720bd2-b3d6-4bbc-9295-5e0944cd0393)
 
@@ -52,7 +52,7 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 ### Prerequisites
 
 - Python 3.8+
-- [kindling](https://github.com/ciscoriordan/kindling) (optional, only needed for `.mobi` generation with `-m` flag)
+- [Kindling](https://github.com/ciscoriordan/kindling) (optional, only needed for `.mobi` generation with `-m` flag)
 - Works on macOS, Linux, and Windows
 
 ### Installation
@@ -83,7 +83,7 @@ python3 greek_kindle_dictionary.py -l 10
 ### Command Line Arguments
 
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
-- `-m, --mobi`: Also generate `.mobi` via kindling (for sideloading)
+- `-m, --mobi`: Also generate `.mobi` via Kindling (for sideloading)
 - `-i, --inflections N`: Max inflections per headword (default: 50)
 - `-h, --help`: Show help message
 
@@ -140,7 +140,7 @@ The dictionaries include:
 
 Each headword includes up to 30 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`). When pre-ranked forms from Dilemma are available, these 30 slots are filled with case-deduplicated forms in corpus frequency order. Without pre-ranked forms, a local FrequencyRanker handles ranking. Testing against a real Greek ebook showed that 30 unique inflections per headword covers ~95% of inflected form lookups. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
 
-Note: *kindlegen* has an undocumented limit of 255 inflection rules per entry. Since [kindling](https://github.com/ciscoriordan/kindling) uses orth-index-only encoding (no inflection INDX), this limit does not apply. The 30-form cap is a practical choice for file size and lookup performance, not a format constraint. Use `-i N` to adjust.
+Note: *kindlegen* has an undocumented limit of 255 inflection rules per entry. Since [Kindling](https://github.com/ciscoriordan/kindling) uses orth-index-only encoding (no inflection INDX), this limit does not apply. The 30-form cap is a practical choice for file size and lookup performance, not a format constraint. Use `-i N` to adjust.
 
 ### Excluded Content
 
@@ -166,7 +166,7 @@ The following are filtered out as they cannot be selected in Kindle texts:
 
 ### Building Issues
 
-- **kindling not found**: Only needed for `.mobi` generation (`-m` flag). Download from [kindling releases](https://github.com/ciscoriordan/kindling/releases)
+- **Kindling not found**: Only needed for `.mobi` generation (`-m` flag). Download from [Kindling releases](https://github.com/ciscoriordan/kindling/releases)
 - **Download freezes**: Use pre-downloaded data files from the repository
 - **Memory issues**: Use the `-l` option to build smaller test dictionaries first
 
