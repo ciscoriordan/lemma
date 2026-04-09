@@ -13,7 +13,8 @@ import time
 from lib.frequency_ranker import FrequencyRanker
 
 
-MAX_INFLECTIONS = 50
+MAX_INFLECTIONS = 255
+MAX_POLYTONIC = 255
 
 ACCENT_FROM = 'άέήίόύώΐΰϊϋΆΈΉΊΌΎΏ'
 ACCENT_TO   = 'αεηιουωιυιυαεηιουω'
@@ -39,6 +40,54 @@ POS_MAP = {
 _STRIP_TAGS = {'masculine', 'feminine', 'neuter', 'participle', 'singular', 'plural'}
 
 _GENDER_EXPAND = {'m': 'masculine', 'f': 'feminine', 'n': 'neuter'}
+
+# Polytonic breathing mark tables: monotonic vowel -> (smooth, rough) polytonic form
+_BREATHING = {
+    'α': ('ἀ', 'ἁ'), 'ά': ('ἄ', 'ἅ'),
+    'ε': ('ἐ', 'ἑ'), 'έ': ('ἔ', 'ἕ'),
+    'η': ('ἠ', 'ἡ'), 'ή': ('ἤ', 'ἥ'),
+    'ι': ('ἰ', 'ἱ'), 'ί': ('ἴ', 'ἵ'),
+    'ο': ('ὀ', 'ὁ'), 'ό': ('ὄ', 'ὅ'),
+    'υ': ('ὐ', 'ὑ'), 'ύ': ('ὔ', 'ὕ'),
+    'ω': ('ὠ', 'ὡ'), 'ώ': ('ὤ', 'ὥ'),
+    'Α': ('Ἀ', 'Ἁ'), 'Ά': ('Ἄ', 'Ἅ'),
+    'Ε': ('Ἐ', 'Ἑ'), 'Έ': ('Ἔ', 'Ἕ'),
+    'Η': ('Ἠ', 'Ἡ'), 'Ή': ('Ἤ', 'Ἥ'),
+    'Ι': ('Ἰ', 'Ἱ'), 'Ί': ('Ἴ', 'Ἵ'),
+    'Ο': ('Ὀ', 'Ὁ'), 'Ό': ('Ὄ', 'Ὅ'),
+    'Υ': ('Ὑ', 'Ὑ'), 'Ύ': ('Ὕ', 'Ὕ'),  # Υ initial always rough
+    'Ω': ('Ὠ', 'Ὡ'), 'Ώ': ('Ὤ', 'Ὥ'),
+}
+_VOWELS_SET = set(_BREATHING.keys())
+# Diphthongs where breathing goes on the second vowel
+_DIPHTHONG_FIRSTS = set('αεοΑΕΟ')
+_DIPHTHONG_SECONDS = set('ιυίύΙΥΊΎ')
+
+# Monotonic acute → polytonic grave and circumflex equivalents.
+# Grave appears on final-accented words before another word.
+# Circumflex appears on long vowels (η, ω, and sometimes α, ι, υ).
+_ACUTE_TO_GRAVE = {
+    'ά': 'ὰ', 'έ': 'ὲ', 'ή': 'ὴ', 'ί': 'ὶ', 'ό': 'ὸ', 'ύ': 'ὺ', 'ώ': 'ὼ',
+    'Ά': 'Ὰ', 'Έ': 'Ὲ', 'Ή': 'Ὴ', 'Ί': 'Ὶ', 'Ό': 'Ὸ', 'Ύ': 'Ὺ', 'Ώ': 'Ὼ',
+}
+_ACUTE_TO_CIRCUMFLEX = {
+    'ά': 'ᾶ', 'ή': 'ῆ', 'ί': 'ῖ', 'ύ': 'ῦ', 'ώ': 'ῶ',
+    # No circumflex for έ/ό (short vowels in Greek)
+}
+# Breathing + grave and breathing + circumflex combinations
+_BREATHING_GRAVE = {
+    'α': ('ἂ', 'ἃ'), 'ε': ('ἒ', 'ἓ'), 'η': ('ἢ', 'ἣ'), 'ι': ('ἲ', 'ἳ'),
+    'ο': ('ὂ', 'ὃ'), 'υ': ('ὒ', 'ὓ'), 'ω': ('ὢ', 'ὣ'),
+    'Α': ('Ἂ', 'Ἃ'), 'Ε': ('Ἒ', 'Ἓ'), 'Η': ('Ἢ', 'Ἣ'), 'Ι': ('Ἲ', 'Ἳ'),
+    'Ο': ('Ὂ', 'Ὃ'), 'Υ': ('Ὓ', 'Ὓ'), 'Ω': ('Ὢ', 'Ὣ'),
+}
+_BREATHING_CIRCUMFLEX = {
+    'α': ('ᾆ', 'ᾇ'), 'η': ('ᾖ', 'ᾗ'), 'ι': ('ἶ', 'ἷ'),
+    'υ': ('ὖ', 'ὗ'), 'ω': ('ὦ', 'ὧ'),
+    'Α': ('ᾎ', 'ᾏ'), 'Η': ('ᾞ', 'ᾟ'), 'Ι': ('Ἶ', 'Ἷ'),
+    'Ω': ('Ὦ', 'Ὧ'),
+}
+_ACUTE_VOWELS = set(_ACUTE_TO_GRAVE.keys())
 
 
 class HtmlGenerator:
@@ -86,6 +135,15 @@ class HtmlGenerator:
         escaped = _escape_html(text)
         return escaped.replace('\x01', '<b>').replace('\x02', '</b>')
 
+    @staticmethod
+    def _sanitize_anchor_id(text):
+        """Sanitize a string for use as an HTML id attribute.
+
+        HTML id values must not contain spaces. Replace spaces with
+        underscores so that href="#hw_X" and id="hw_X" always match.
+        """
+        return text.replace(' ', '_')
+
     def _linkify_definition(self, text):
         """Replace Greek words in definition text with anchor links if they are headwords."""
         if not self.generator.enable_links:
@@ -95,7 +153,8 @@ class HtmlGenerator:
         for part in parts:
             if self._GREEK_WORD_RE.fullmatch(part) and part in self.entries:
                 escaped = _escape_html(part)
-                result.append(f'<a href="#hw_{escaped}">{escaped}</a>')
+                anchor = self._sanitize_anchor_id(escaped)
+                result.append(f'<a href="#hw_{anchor}">{escaped}</a>')
             else:
                 result.append(_escape_html(part))
         return ''.join(result)
@@ -272,11 +331,64 @@ class HtmlGenerator:
 
         print(f"  Merged {merged_count} form-of entries into parent headwords")
 
+    def _build_iform_owners(self):
+        """Assign each iform to exactly one headword based on frequency.
+
+        When multiple headwords claim the same iform (e.g., both κλαίω and
+        κλαίγω claim έκλαιγε), the Kindle shows whichever comes first in
+        the file. We assign contested iforms to the highest-frequency
+        headword so the best definition wins.
+        """
+        dilemma = self.generator.dilemma_inflections
+        freq = self.frequency_ranker
+
+        # Collect all iform claims including dilemma ranked forms
+        claims = {}
+        for word, entries in self.entries.items():
+            for e in entries:
+                for inf in (e.get('inflections') or []):
+                    if inf not in claims:
+                        claims[inf] = []
+                    claims[inf].append(word)
+            # Also check dilemma ranked forms (these get added in _select_ranked_inflections)
+            if self._use_ranked_forms and dilemma:
+                for inf in (dilemma.get_ranked_forms(word) or []):
+                    if inf not in claims:
+                        claims[inf] = []
+                    if word not in claims[inf]:
+                        claims[inf].append(word)
+
+        # For contested iforms, pick the winner by frequency
+        self._iform_owner = {}  # iform -> winning headword
+        contested = 0
+        for iform, headwords in claims.items():
+            unique = list(dict.fromkeys(headwords))  # dedup preserving order
+            if len(unique) <= 1:
+                continue
+            contested += 1
+
+            def headword_freq(hw):
+                if self._use_ranked_forms and dilemma:
+                    return len(dilemma.get_ranked_forms(hw) or [])
+                if freq:
+                    return freq.frequency(hw)
+                return 0
+
+            winner = max(unique, key=headword_freq)
+            for hw in unique:
+                if hw != winner:
+                    self._iform_owner[iform] = winner
+
+        print(f"  Deduplicated {contested} contested iforms by frequency")
+
     def _create_content_html(self):
         print("Creating content.html...")
 
         # Merge pure form-of entries into their parents
         self._merge_form_of_into_parents()
+
+        # Assign contested iforms to highest-frequency headword
+        self._build_iform_owners()
 
         # Sort keys only to avoid copying all entry data
         sorted_keys = sorted(self.entries.keys(), key=self._normalize_for_sorting)
@@ -372,8 +484,46 @@ class HtmlGenerator:
         else:
             all_variations = self._rank_inflections(single_word_inflections)[:max_inflections]
 
+        # Remove iforms owned by a higher-frequency headword
+        all_variations = [
+            inf for inf in all_variations
+            if self._iform_owner.get(inf, word) == word
+        ]
+
+        # Add polytonic variants when explicitly enabled
+        if self.generator.enable_polytonic:
+            dilemma = self.generator.dilemma_inflections
+            all_forms = [word] + all_variations
+            polytonic_forms = []
+            seen_poly = set(all_forms)
+
+            if dilemma and dilemma.has_polytonic_ranked():
+                # Use corpus-attested polytonic variants
+                for form in all_forms:
+                    for pv in dilemma.get_polytonic_variants(form):
+                        if pv not in seen_poly:
+                            seen_poly.add(pv)
+                            polytonic_forms.append(pv)
+            else:
+                # Fallback: blind generation
+                for form in all_forms:
+                    for pv in _polytonic_variants(form):
+                        if pv not in seen_poly:
+                            seen_poly.add(pv)
+                            polytonic_forms.append(pv)
+
+            all_variations.extend(polytonic_forms[:MAX_POLYTONIC])
+
         escaped_word = _escape_html(word)
-        io.write(f"""\
+        if self.generator.enable_links:
+            anchor_id = self._sanitize_anchor_id(escaped_word)
+            io.write(f"""\
+<idx:entry name="default" scriptable="yes" spell="yes" id="hw_{anchor_id}">
+  <idx:short>
+    <idx:orth value="{escaped_word}"><b>{escaped_word}</b>
+""")
+        else:
+            io.write(f"""\
 <idx:entry name="default" scriptable="yes" spell="yes">
   <idx:short>
     <idx:orth value="{escaped_word}"><b>{escaped_word}</b>
@@ -504,7 +654,10 @@ class HtmlGenerator:
 
                 etym = entry.get('etymology')
                 if etym and etym.strip() and self.generator.enable_etymology:
-                    io.write(f"  <br/><br/>\n  <p class='etym'><b>Etymology:</b></p>\n  <p class='etym'><i>{_escape_html(etym)}</i></p>\n")
+                    etym = _strip_transliterations(etym)
+                    etym = _clean_etymology(etym)
+                    if etym:
+                        io.write(f"  <br/>\n  <p class='etym'>Etymology: {_escape_html(etym)}</p>\n")
 
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <br/><br/>\n")
@@ -547,7 +700,7 @@ class HtmlGenerator:
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
   </head>
   <body>
-    <h1>Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary</h1>
+    <h1>Lemma Greek{" Basic" if not self._is_full_build else ""}</h1>
     <h3>From {source_desc}</h3>
     <h3>A Lemma Project</h3>
     <p>{date_info}</p>
@@ -594,7 +747,7 @@ class HtmlGenerator:
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
   </head>
   <body>
-    <h2>How to Use Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary</h2>
+    <h2>How to Use Lemma Greek{" Basic" if not self._is_full_build else ""}</h2>
     <p>This is a {dict_type} dictionary with Modern Greek words from {source_desc} Wiktionary.</p>
     <h3>Features:</h3>
     <ul>
@@ -606,7 +759,7 @@ class HtmlGenerator:
     <ol>
       <li>Look up any Greek word in your book</li>
       <li>Tap the dictionary name in the popup</li>
-      <li>Select "Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary"</li>
+      <li>Select "Lemma Greek{" Basic" if not self._is_full_build else ""}"</li>
     </ol>
   </body>
 </html>
@@ -616,17 +769,21 @@ class HtmlGenerator:
 
     def _create_opf_file(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
-        edition = "" if self._is_full_build else " Basic"
-        edition_tag = "" if self._is_full_build else "Basic"
+        if not self._is_full_build:
+            edition = " Basic"
+            edition_tag = "Basic"
+        else:
+            edition = ""
+            edition_tag = ""
 
         unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
+        display_title = f"Lemma Greek{edition}"
 
         date_str = self.generator.extraction_date or self.generator.download_date
-        title_with_date = f"{display_title} ({date_str}){edition}"
+        title_with_date = display_title
         out_lang = 'en' if self.generator.source_lang == 'en' else 'el'
 
-        build_tag = "" if self._is_full_build else "_basic"
+        build_tag = self.generator._build_tag
         opf_filename = f"lemma_greek_{self.generator.source_lang}_{self.generator.download_date}{build_tag}.opf"
 
         content = f"""\
@@ -682,10 +839,14 @@ class HtmlGenerator:
 
     def _create_toc_ncx(self):
         source_name = 'en-el' if self.generator.source_lang == 'en' else 'el-el'
-        edition = "" if self._is_full_build else " Basic"
-        edition_tag = "" if self._is_full_build else "Basic"
+        if not self._is_full_build:
+            edition = " Basic"
+            edition_tag = "Basic"
+        else:
+            edition = ""
+            edition_tag = ""
         unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek Dictionary {source_name.upper()}"
+        display_title = f"Lemma Greek{edition}"
 
         content = f"""\
 <?xml version="1.0" encoding="UTF-8"?>
@@ -789,6 +950,67 @@ def _format_head_for_pos(stripped):
     return result
 
 
+def _breathing_variants(form):
+    """Add breathing marks to initial vowel. Returns list of (smooth, rough) variants."""
+    if not form or form[0] not in _VOWELS_SET:
+        return []
+
+    # Check for diphthong: first vowel (α/ε/ο) + second vowel (ι/υ)
+    if len(form) >= 2 and form[0] in _DIPHTHONG_FIRSTS and form[1] in _DIPHTHONG_SECONDS:
+        pair = _BREATHING.get(form[1])
+        if not pair:
+            return []
+        smooth, rough = pair
+        return [form[0] + smooth + form[2:], form[0] + rough + form[2:]]
+
+    pair = _BREATHING.get(form[0])
+    if not pair:
+        return []
+    smooth, rough = pair
+    return [smooth + form[1:], rough + form[1:]]
+
+
+def _accent_variants(form):
+    """Replace the accented vowel with grave/circumflex polytonic equivalents."""
+    results = []
+    for i, ch in enumerate(form):
+        if ch in _ACUTE_VOWELS:
+            grave = _ACUTE_TO_GRAVE.get(ch)
+            if grave:
+                results.append(form[:i] + grave + form[i+1:])
+            circ = _ACUTE_TO_CIRCUMFLEX.get(ch)
+            if circ:
+                results.append(form[:i] + circ + form[i+1:])
+            break  # Only one accent per word in Greek
+    return results
+
+
+def _polytonic_variants(form):
+    """Generate polytonic variants of a monotonic Greek form.
+
+    Handles three types of polytonic differences:
+    1. Breathing marks on initial vowels (smooth + rough)
+    2. Grave accent replacing acute (on final-accented words)
+    3. Circumflex accent replacing acute (on long vowels)
+    Plus combinations of breathing with grave/circumflex.
+    """
+    results = set()
+
+    # Breathing variants of the original form
+    for bv in _breathing_variants(form):
+        results.add(bv)
+
+    # Accent variants (grave, circumflex) of the original form
+    for av in _accent_variants(form):
+        results.add(av)
+        # Breathing variants of accent variants
+        for bv in _breathing_variants(av):
+            results.add(bv)
+
+    results.discard(form)
+    return list(results)
+
+
 def _def_has_tag(definition, tag):
     """Check if a definition string starts with a qualifier containing the tag."""
     m = re.match(r'^\(([^)]+)\)', definition)
@@ -798,14 +1020,46 @@ def _def_has_tag(definition, tag):
     return tag in tags
 
 
+def _clean_etymology(text):
+    """Truncate etymology at noise like typological comparisons and bullet lists."""
+    for marker in ['Typological comparisons', 'See also', '\n*', '\n•']:
+        pos = text.find(marker)
+        if pos > 0:
+            text = text[:pos]
+    return text.strip()
+
+
+def _strip_transliterations(text):
+    """Strip parenthesized transliterations containing accented Latin characters.
+
+    Input:  "accusative masculine singular of όμορφος (ómorfos)"
+    Output: "accusative masculine singular of όμορφος"
+
+    Input:  "From θάλασσα (thálassa, \"sea\")"
+    Output: "From θάλασσα"
+
+    Only strips groups containing accented Latin, so legitimate
+    annotations like (plural) or (indeclinable) are preserved.
+    """
+    # Strip groups with accented Latin (transliterations)
+    # Covers Latin Extended-A/B (U+00C0-U+024F) and Latin Extended Additional (U+1E00-U+1EFF)
+    text = re.sub(r'\s*\([^)]*[\u00C0-\u024F\u1E00-\u1EFF][^)]*\)', '', text)
+    # Strip groups with quoted glosses like (tis, "of the")
+    text = re.sub(r'\s*\([^)"]*"[^)]*\)', '', text)
+    return text
+
+
 def _strip_def_qualifiers(definition):
-    """Strip redundant gender/participle qualifiers from definition text.
+    """Strip redundant qualifiers and transliterations from definition text.
 
     Input:  "(masculine, participle) beaten, struck"
     Output: "beaten, struck"
 
-    Only strips tags in _STRIP_TAGS. If there are other tags, keeps them.
+    Input:  "accusative of όμορφος (ómorfos)"
+    Output: "accusative of όμορφος"
     """
+    # Strip transliterations first
+    definition = _strip_transliterations(definition)
     m = re.match(r'^\(([^)]+)\)\s*', definition)
     if not m:
         return definition

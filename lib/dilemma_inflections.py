@@ -19,7 +19,9 @@ class DilemmaInflections:
         self._equivalences = {}  # variant -> canonical
         self._reverse_equivalences = {}  # canonical -> [variants]
         self._ranked_forms = {}  # lemma -> [forms] pre-ranked by corpus frequency
+        self._polytonic_ranked = {}  # monotonic -> [polytonic variants] ranked by frequency
         self._load_ranked_forms()
+        self._load_polytonic_ranked()
         self._load_data()
         self._load_equivalences()
 
@@ -169,6 +171,62 @@ class DilemmaInflections:
             self._ranked_forms = json.load(f)
         elapsed = time.time() - start
         print(f"Loaded pre-ranked forms for {len(self._ranked_forms)} lemmas in {elapsed:.1f}s")
+
+    def has_polytonic_ranked(self):
+        """Return True if corpus-ranked polytonic variants are loaded."""
+        return len(self._polytonic_ranked) > 0
+
+    def get_polytonic_variants(self, form):
+        """Return corpus-ranked polytonic variants for a monotonic form, or empty list."""
+        return self._polytonic_ranked.get(form, [])
+
+    def _load_polytonic_ranked(self):
+        """Load corpus-ranked polytonic variants from mg_polytonic_ranked.json.
+
+        Tries in order:
+        1. lemma project's own data/ directory
+        2. DILEMMA_DATA_DIR env var or .env file
+        3. HuggingFace Hub (ciscoriordan/dilemma-data)
+        """
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        # 1. Check lemma's own data/ directory
+        local_path = os.path.join(project_root, 'data', 'mg_polytonic_ranked.json')
+        if os.path.exists(local_path):
+            self._read_polytonic_ranked(local_path)
+            return
+
+        # 2. Check DILEMMA_DATA_DIR
+        data_dir = self._find_data_dir()
+        if data_dir:
+            ranked_path = os.path.join(data_dir, 'mg_polytonic_ranked.json')
+            if os.path.exists(ranked_path):
+                self._read_polytonic_ranked(ranked_path)
+                return
+
+        # 3. Try HuggingFace Hub
+        try:
+            from huggingface_hub import hf_hub_download
+            cached_path = hf_hub_download(
+                repo_id='ciscoriordan/dilemma-data',
+                filename='mg_polytonic_ranked.json',
+                repo_type='dataset',
+            )
+            self._read_polytonic_ranked(cached_path)
+            return
+        except Exception:
+            pass
+
+        print("mg_polytonic_ranked.json not found, polytonic will use blind generation fallback")
+
+    def _read_polytonic_ranked(self, path):
+        """Read mg_polytonic_ranked.json into self._polytonic_ranked."""
+        print(f"Loading polytonic ranked variants from {path}...")
+        start = time.time()
+        with open(path, 'r', encoding='utf-8') as f:
+            self._polytonic_ranked = json.load(f)
+        elapsed = time.time() - start
+        print(f"Loaded polytonic variants for {len(self._polytonic_ranked)} monotonic forms in {elapsed:.1f}s")
 
     def _load_equivalences(self):
         """Load MG lemma equivalences from data/mg_lemma_equivalences.json."""

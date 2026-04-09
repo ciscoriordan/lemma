@@ -59,6 +59,13 @@ def main():
         help="Include etymology information in entries (default: off)",
     )
 
+    parser.add_argument(
+        "--polytonic",
+        action="store_true",
+        default=False,
+        help="Add polytonic breathing/accent variants as inflections (for polytonic MG books)",
+    )
+
     args = parser.parse_args()
 
     if args.limit is not None:
@@ -72,6 +79,7 @@ def main():
         max_inflections=args.inflections,
         enable_links=args.links,
         enable_etymology=args.etymology,
+        enable_polytonic=args.polytonic,
     )
     generator.generate()
 

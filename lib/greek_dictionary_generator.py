@@ -18,7 +18,8 @@ from lib.mobi_generator import MobiGenerator
 
 class GreekDictionaryGenerator:
     def __init__(self, source_lang='en', limit_percent=None, generate_mobi=False,
-                 max_inflections=None, enable_links=False, enable_etymology=False):
+                 max_inflections=None, enable_links=False, enable_etymology=False,
+                 enable_polytonic=False):
         if source_lang not in ('en', 'el'):
             raise ValueError("Source language must be 'en' or 'el'")
         self.source_lang = source_lang
@@ -28,10 +29,11 @@ class GreekDictionaryGenerator:
         self.enable_links = enable_links
         self.enable_etymology = enable_etymology
         self.is_full_build = enable_links or enable_etymology
+        self.enable_polytonic = enable_polytonic or self.is_full_build
         self.entries = {}
         self.extraction_date = None
         self.download_date = time.strftime("%Y%m%d")
-        self._build_tag = "" if self.is_full_build else "_basic"
+        self._build_tag = "_basic" if not self.is_full_build else ""
         self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}{self._build_tag}"
         self.dilemma_inflections = None
 

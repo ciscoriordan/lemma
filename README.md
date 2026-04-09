@@ -1,12 +1,15 @@
 # Lemma Modern Greek Dictionary for Kindle
 
 <p align="center">
-  <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="lemma_banner.png">
+  <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
 </p>
 
-A Greek-English dictionary for Kindle e-readers. 80K headwords, 486K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling).
+A Greek-English dictionary for Kindle e-readers. 31K headwords, 574K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling). Includes polytonic support for pre-1982 Greek texts.
 
-![Dictionary lookup on Kindle](https://github.com/user-attachments/assets/b4720bd2-b3d6-4bbc-9295-5e0944cd0393)
+| Basic | Pro |
+|:---:|:---:|
+| ![Basic dictionary](images/screenshot_basic.jpg) | ![Pro dictionary](images/screenshot_pro.jpg) |
+| Definitions and inflections | Gender, etymology, examples, polytonic |
 
 ## Quick Install
 
@@ -29,7 +32,7 @@ A Greek-English dictionary for Kindle e-readers. 80K headwords, 486K inflected f
 1. **Open any Greek text** on your Kindle
 2. **Select a Greek word** to look up
 3. **Tap the dictionary name** at the bottom of the popup
-4. **Select "Lemma Greek Basic Dictionary"** from the list
+4. **Select "Lemma Greek Basic"** or **"Lemma Greek"** from the list
 5. The dictionary is now your default for Greek lookups
 
 ## Pre-built Dictionaries
@@ -38,12 +41,17 @@ Ready-to-use dictionary files are available in the `/dist` folder:
 
 ### Greek-English Dictionary
 
-- `lemma_greek_en_[date]_basic.mobi` - MOBI for sideloading (generated with `-m` flag)
+- `lemma_greek_en_[date]_basic.mobi` - Basic edition: definitions and inflections
+- `lemma_greek_en_[date].mobi` - Pro edition: adds gender/variant info, etymology, cross-reference links, and polytonic lookup support
 
 ## Features
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.76M form-to-lemma mappings from [Dilemma](https://github.com/ciscoriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
 - **Pre-Ranked Inflections**: When [Dilemma](https://github.com/ciscoriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
+- **Polytonic Support** (Pro): Corpus-attested polytonic forms from Greek Wikisource, enabling lookups in pre-1982 polytonic texts
+- **Gender and Variants** (Pro): POS line shows gender and key forms (e.g., "noun, feminine (plural θάλασσες)")
+- **Etymology** (Pro): Word origins with transliterations stripped for clean display
+- **Cross-References** (Pro): Clickable links between related entries
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
 
@@ -84,7 +92,10 @@ python3 greek_kindle_dictionary.py -l 10
 
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
 - `-m, --mobi`: Also generate `.mobi` via Kindling (for sideloading)
-- `-i, --inflections N`: Max inflections per headword (default: 50)
+- `-i, --inflections N`: Max inflections per headword (default: 255)
+- `--links`: Enable clickable cross-references between entries
+- `--etymology`: Include etymology information in entries
+- `--polytonic`: Add polytonic breathing/accent variants as inflections, for looking up words in polytonic Modern Greek books. Increases file size.
 - `-h, --help`: Show help message
 
 ## Data Sources
@@ -138,9 +149,9 @@ The dictionaries include:
 
 ### Inflection Limit
 
-Each headword includes up to 30 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`). When pre-ranked forms from Dilemma are available, these 30 slots are filled with case-deduplicated forms in corpus frequency order. Without pre-ranked forms, a local FrequencyRanker handles ranking. Testing against a real Greek ebook showed that 30 unique inflections per headword covers ~95% of inflected form lookups. At 50 the coverage reaches ~98%, at 100 it's ~99.9%.
+Each headword includes up to 255 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`), ranked by corpus frequency when pre-ranked forms from Dilemma are available. Use `-i N` to adjust.
 
-Note: *kindlegen* has an undocumented limit of 255 inflection rules per entry. Since [Kindling](https://github.com/ciscoriordan/kindling) uses orth-index-only encoding (no inflection INDX), this limit does not apply. The 30-form cap is a practical choice for file size and lookup performance, not a format constraint. Use `-i N` to adjust.
+Pro builds also include up to 255 polytonic variants per headword (`MAX_POLYTONIC`), sourced from attested forms in Greek Wikisource via Dilemma's `mg_polytonic_ranked.json`. This enables lookups in polytonic Modern Greek texts (pre-1982 orthography, Katharevousa literature, etc.).
 
 ### Excluded Content
 
