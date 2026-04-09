@@ -6,10 +6,10 @@
 
 A Greek-English dictionary for Kindle e-readers. 31K headwords, 574K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling). Includes polytonic support for pre-1982 Greek texts.
 
-| Basic | Pro |
+| [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
 |:---:|:---:|
 | ![Basic dictionary](images/screenshot_basic.jpg) | ![Pro dictionary](images/screenshot_pro.jpg) |
-| Definitions and inflections | Gender, etymology, examples, polytonic |
+| <ul><li>Definitions</li><li>Inflections</li><li>Monotonic</li></ul> | <ul><li>Definitions</li><li>Inflections</li><li>Gender and variants</li><li>Etymology</li><li>Examples</li><li>Monotonic</li><li>Polytonic</li></ul> |
 
 ## Quick Install
 
