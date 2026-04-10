@@ -4,7 +4,7 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
 </p>
 
-A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, 7,000x faster kindlegen replacement).
+A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, ~7,000x faster kindlegen replacement).
 
 | [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
 |:---|:---|
