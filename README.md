@@ -184,7 +184,7 @@ The following are filtered out as they cannot be selected in Kindle texts:
 
 ## License
 
-MIT - Copyright (c) 2026 Francisco Riordan
+MIT - © 2026 Francisco Riordan
 
 - **Dictionary content and data**: [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/) (derived from Wiktionary)
 - **Frequency data** (`data/el_full.txt`): [MIT License](https://github.com/hermitdave/FrequencyWords/blob/master/LICENSE) (from FrequencyWords/OpenSubtitles)
