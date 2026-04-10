@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+#
+# Lemma pre-commit hook: run `kindling validate` against any dictionary OPF
+# manuscript whose directory has staged changes.
+#
+# Install with: ./scripts/install-hooks.sh
+# Bypass with:  git commit --no-verify
+#
+# Exits 0 if:
+#   - No staged files live under a `lemma_greek_en_*/` directory
+#   - All changed dictionaries validate cleanly
+#   - kindling-cli is not available (graceful fallback, prints a warning)
+#
+# Exits 1 if any changed dictionary fails validation.
+
+set -u
+
+# Find kindling-cli: prefer PATH, fall back to the local release build.
+KINDLING_BIN=""
+if command -v kindling >/dev/null 2>&1; then
+    KINDLING_BIN="$(command -v kindling)"
+elif command -v kindling-cli >/dev/null 2>&1; then
+    KINDLING_BIN="$(command -v kindling-cli)"
+elif [ -x "$HOME/Documents/kindling/target/release/kindling-cli" ]; then
+    KINDLING_BIN="$HOME/Documents/kindling/target/release/kindling-cli"
+fi
+
+# Collect staged files under lemma_greek_en_*/ directories.
+# Use -z to survive filenames with spaces.
+staged_dirs=()
+while IFS= read -r -d '' path; do
+    case "$path" in
+        lemma_greek_en_*/*)
+            # Extract the top-level dict directory (first path component).
+            dir="${path%%/*}"
+            # Deduplicate by scanning the accumulator.
+            already=0
+            for d in "${staged_dirs[@]+"${staged_dirs[@]}"}"; do
+                if [ "$d" = "$dir" ]; then
+                    already=1
+                    break
+                fi
+            done
+            if [ "$already" -eq 0 ]; then
+                staged_dirs+=("$dir")
+            fi
+            ;;
+    esac
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+# Nothing relevant staged: exit fast, no noise.
+if [ "${#staged_dirs[@]}" -eq 0 ]; then
+    exit 0
+fi
+
+# kindling-cli missing: warn but don't block the commit.
+if [ -z "$KINDLING_BIN" ]; then
+    echo "Pre-commit: kindling-cli not found on PATH or at ~/Documents/kindling/target/release/kindling-cli"
+    echo "Pre-commit: skipping KDP validation for staged dictionaries. Build kindling to enable it."
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+failed=0
+
+for dict_dir in "${staged_dirs[@]}"; do
+    abs_dir="$repo_root/$dict_dir"
+    if [ ! -d "$abs_dir" ]; then
+        echo "Pre-commit: $dict_dir is staged but the directory is missing on disk, skipping"
+        continue
+    fi
+
+    # Find the .opf inside this dict dir (expect exactly one).
+    opf=""
+    for candidate in "$abs_dir"/*.opf; do
+        if [ -f "$candidate" ]; then
+            opf="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$opf" ]; then
+        echo "Pre-commit: no .opf found in $dict_dir, skipping validation"
+        continue
+    fi
+
+    echo "Pre-commit: validating $(basename "$opf")"
+    if ! "$KINDLING_BIN" validate "$opf"; then
+        echo ""
+        echo "Pre-commit: KDP validation failed for $opf. Fix the issues or run \`git commit --no-verify\` to bypass."
+        failed=1
+    fi
+done
+
+if [ "$failed" -ne 0 ]; then
+    exit 1
+fi
+
+echo "Pre-commit: KDP validation passed"
+exit 0

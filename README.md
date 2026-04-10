@@ -182,6 +182,25 @@ The following are filtered out as they cannot be selected in Kindle texts:
 - **Download freezes**: Use pre-downloaded data files from the repository
 - **Memory issues**: Use the `-l` option to build smaller test dictionaries first
 
+## Git Hooks
+
+A pre-commit hook runs [Kindling's](https://github.com/ciscoriordan/kindling) `kindling validate` against any dictionary OPF whose directory has staged changes, so broken manuscripts can't be committed. It checks against the Amazon Kindle Publishing Guidelines (KPG 2026.1).
+
+Install it once per clone:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+This symlinks `.git/hooks/pre-commit` to the tracked `scripts/pre-commit`, so future updates to the hook are picked up automatically.
+
+Behavior:
+
+- If the commit doesn't touch any `lemma_greek_en_*/` directory, the hook exits immediately.
+- For each changed dict directory, it finds the `.opf` and runs `kindling validate` on it. A non-zero exit aborts the commit with the failing findings.
+- If `kindling-cli` isn't on `PATH` (and isn't at `~/Documents/kindling/target/release/kindling-cli`), the hook prints a warning and lets the commit through.
+- Bypass with `git commit --no-verify` when you need to commit in spite of validation output.
+
 ## License
 
 MIT - © 2026 Francisco Riordan
