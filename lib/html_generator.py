@@ -434,7 +434,7 @@ class HtmlGenerator:
       xmlns:mmc="https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf"
       xmlns:idx="https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf">
   <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <style>
       h5 { font-size: 1em; margin: 0; }
       p { margin: 0.2em 0; }
@@ -443,7 +443,7 @@ class HtmlGenerator:
       .pos { font-style: italic; }
       .def { margin-left: 20px; }
       .ex { margin-left: 20px; }
-      .etym { margin-top: 0.3em; }
+      .etym { margin-top: 0.5em; margin-left: 0; background-color: #f0f0f0; padding: 0.2em 0.4em; }
       hr { margin: 5px 0; border: none; border-top: 1px solid #ccc; }
     </style>
   </head>
@@ -661,7 +661,7 @@ class HtmlGenerator:
                     etym = _strip_transliterations(etym)
                     etym = _clean_etymology(etym)
                     if etym:
-                        io.write(f"  <br/>\n  <p class='etym'>Etymology: {_escape_html(etym)}</p>\n")
+                        io.write(f"  <p class='etym'>Etymology: {_escape_html(etym)}</p>\n")
 
                 if len(entries) > 1 and idx < len(entries) - 1:
                     io.write("  <br/><br/>\n")
@@ -705,7 +705,7 @@ class HtmlGenerator:
         content = """\
 <html>
   <head>
-    <meta content="text/html; charset=utf-8" http-equiv="content-type">
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
     <style>
       body { margin: 0; padding: 0; text-align: center; }
       img { max-width: 100%; height: auto; }
@@ -727,7 +727,8 @@ class HtmlGenerator:
         content = f"""\
 <html>
   <head>
-    <meta content="text/html; charset=utf-8" http-equiv="content-type">
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <style>p {{ text-indent: 0; margin: 0.3em 0; }}</style>
   </head>
   <body>
     <h2>Copyright</h2>
@@ -757,25 +758,43 @@ class HtmlGenerator:
 
         source_desc = 'English' if self.generator.source_lang == 'en' else 'Greek'
 
+        dict_name = f"Lemma Greek{' Basic' if not self._is_full_build else ''} Dictionary"
+        headword_count = f"{self.generator.entry_count:,}" if hasattr(self.generator, 'entry_count') else "31,000+"
+        inflection_count = f"{self.generator.inflection_count:,}" if hasattr(self.generator, 'inflection_count') else "660,000+"
+
+        if self._is_full_build:
+            features = """\
+    <ul>
+      <li>31,000+ headwords with 689,000+ inflected lookup forms</li>
+      <li>Both monotonic and polytonic Greek supported</li>
+      <li>Part of speech tags and grammatical details</li>
+      <li>14,000+ etymologies</li>
+      <li>5,000+ usage examples</li>
+    </ul>"""
+        else:
+            features = """\
+    <ul>
+      <li>31,000+ headwords with 660,000+ inflected lookup forms</li>
+      <li>Both monotonic and polytonic Greek supported</li>
+      <li>Part of speech tags</li>
+    </ul>"""
+
         content = f"""\
 <html>
   <head>
-    <meta content="text/html; charset=utf-8" http-equiv="content-type">
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <style>p {{ text-indent: 0; margin: 0.3em 0; }}</style>
   </head>
   <body>
-    <h2>How to Use Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary</h2>
-    <span>This is a {dict_type} dictionary with Modern Greek words from {source_desc} Wiktionary.</span>
-    <br><h3>Features</h3>
-    <ul>
-      <li>Look up any Greek word while reading</li>
-      <li>Inflected forms automatically redirect to their lemma</li>
-      <li>Includes part of speech information</li>
-    </ul>
-    <br><h3>To Set as Default Greek Dictionary</h3>
+    <h2>{dict_name}</h2>
+    <span>A {dict_type} dictionary built from {source_desc} Wiktionary. Look up any Greek word while reading - inflected forms automatically redirect to their headword.</span>
+    <br/><br/><h3>Features</h3>
+{features}
+    <br/><h3>To Set as Default Greek Dictionary</h3>
     <ul>
       <li>Look up any Greek word in your book</li>
       <li>Tap the dictionary name in the popup</li>
-      <li>Select "Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary"</li>
+      <li>Select "{dict_name}"</li>
     </ul>
   </body>
 </html>
@@ -815,7 +834,6 @@ class HtmlGenerator:
     <dc:identifier id="BookId" opf:scheme="UUID">{unique_id}-{self.generator.download_date}</dc:identifier>
     <meta name="wiktionary-extraction-date" content="{self.generator.extraction_date or 'Unknown'}" />
     <meta name="dictionary-name" content="{display_title}" />
-    <meta name="cover" content="cover-image" />
     <x-metadata>
       <DictionaryInLanguage>el</DictionaryInLanguage>
       <DictionaryOutLanguage>{out_lang}</DictionaryOutLanguage>
@@ -826,12 +844,10 @@ class HtmlGenerator:
     <item id="ncx"
           href="toc.ncx"
           media-type="application/x-dtbncx+xml" />
-    <item id="cover-image"
+    <item id="cimage"
           href="cover.jpg"
-          media-type="image/jpeg" />
-    <item id="cover"
-          href="cover.html"
-          media-type="application/xhtml+xml" />
+          media-type="image/jpeg"
+          properties="coverimage" />
     <item id="usage"
           href="usage.html"
           media-type="application/xhtml+xml" />
@@ -843,13 +859,11 @@ class HtmlGenerator:
           media-type="application/xhtml+xml" />
   </manifest>
   <spine toc="ncx">
-    <itemref idref="cover" />
     <itemref idref="usage" />
     <itemref idref="copyright"/>
     <itemref idref="content"/>
   </spine>
   <guide>
-    <reference type="cover" title="Cover" href="cover.html"/>
     <reference type="index" title="IndexName" href="content.html"/>
   </guide>
 </package>
