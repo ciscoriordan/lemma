@@ -101,13 +101,11 @@ class HtmlGenerator:
             generator.dilemma_inflections is not None
             and generator.dilemma_inflections.has_ranked_forms()
         )
+        if HtmlGenerator._shared_frequency_ranker is None:
+            HtmlGenerator._shared_frequency_ranker = FrequencyRanker()
+        self.frequency_ranker = HtmlGenerator._shared_frequency_ranker
         if self._use_ranked_forms:
-            self.frequency_ranker = None
-            print("Using pre-ranked forms from dilemma, skipping FrequencyRanker")
-        else:
-            if HtmlGenerator._shared_frequency_ranker is None:
-                HtmlGenerator._shared_frequency_ranker = FrequencyRanker()
-            self.frequency_ranker = HtmlGenerator._shared_frequency_ranker
+            print("Using pre-ranked forms from dilemma for inflection ordering")
         self._opf_filename = None
 
     @property
@@ -171,7 +169,7 @@ class HtmlGenerator:
         os.makedirs(self.output_dir, exist_ok=True)
 
         self._create_content_html()
-        self._create_cover_html()
+        self._create_cover()
         self._create_copyright_html()
         self._create_usage_html()
         self._create_opf_file()
@@ -342,39 +340,46 @@ class HtmlGenerator:
         dilemma = self.generator.dilemma_inflections
         freq = self.frequency_ranker
 
-        # Collect all iform claims including dilemma ranked forms
-        claims = {}
+        # Collect iform claims, tracking direct vs indirect (equivalence) sources
+        direct_claims = {}   # iform -> set of headwords that directly own it
+        all_claims = {}      # iform -> list of all headwords that claim it
         for word, entries in self.entries.items():
             for e in entries:
                 for inf in (e.get('inflections') or []):
-                    if inf not in claims:
-                        claims[inf] = []
-                    claims[inf].append(word)
-            # Also check dilemma ranked forms (these get added in _select_ranked_inflections)
+                    direct_claims.setdefault(inf, set()).add(word)
+                    all_claims.setdefault(inf, [])
+                    if word not in all_claims[inf]:
+                        all_claims[inf].append(word)
             if self._use_ranked_forms and dilemma:
                 for inf in (dilemma.get_ranked_forms(word) or []):
-                    if inf not in claims:
-                        claims[inf] = []
-                    if word not in claims[inf]:
-                        claims[inf].append(word)
+                    all_claims.setdefault(inf, [])
+                    if word not in all_claims[inf]:
+                        all_claims[inf].append(word)
 
-        # For contested iforms, pick the winner by frequency
+        # Build equivalence lookup: alternate -> canonical
+        equiv_canonical = {}
+        if dilemma and dilemma._equivalences:
+            equiv_canonical = dict(dilemma._equivalences)
+
+        # For contested iforms between equivalent lemmas, canonical form wins.
+        # For non-equivalent contested iforms, don't reassign (both keep it).
         self._iform_owner = {}  # iform -> winning headword
         contested = 0
-        for iform, headwords in claims.items():
-            unique = list(dict.fromkeys(headwords))  # dedup preserving order
+        for iform, headwords in all_claims.items():
+            unique = list(dict.fromkeys(headwords))
             if len(unique) <= 1:
                 continue
+            # Check if any pair is an equivalence pair
+            winner = None
+            for hw in unique:
+                canonical = equiv_canonical.get(hw)
+                if canonical and canonical in unique:
+                    # hw is the alternate, canonical is the winner
+                    winner = canonical
+                    break
+            if not winner:
+                continue
             contested += 1
-
-            def headword_freq(hw):
-                if self._use_ranked_forms and dilemma:
-                    return len(dilemma.get_ranked_forms(hw) or [])
-                if freq:
-                    return freq.frequency(hw)
-                return 0
-
-            winner = max(unique, key=headword_freq)
             for hw in unique:
                 if hw != winner:
                     self._iform_owner[iform] = winner
@@ -431,15 +436,14 @@ class HtmlGenerator:
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <style>
-      body { font-family: Arial, sans-serif; }
       h5 { font-size: 1em; margin: 0; }
       p { margin: 0.2em 0; }
       b { font-weight: bold; }
       i { font-style: italic; }
-      .pos { font-style: italic; color: #666; }
+      .pos { font-style: italic; }
       .def { margin-left: 20px; }
-      .ex { font-size: 0.85em; color: #555; margin-left: 20px; }
-      .etym { font-size: 0.9em; color: #444; margin-top: 0.3em; }
+      .ex { margin-left: 20px; }
+      .etym { margin-top: 0.3em; }
       hr { margin: 5px 0; border: none; border-top: 1px solid #ccc; }
     </style>
   </head>
@@ -687,23 +691,28 @@ class HtmlGenerator:
 
         return pos_display
 
-    def _create_cover_html(self):
-        source_desc = 'English Wiktionary' if self.generator.source_lang == 'en' else 'Greek Wiktionary (Monolingual)'
-        if self.generator.extraction_date:
-            date_info = f"Wiktionary data from: {self.generator.extraction_date}"
+    def _create_cover(self):
+        # Copy cover image to output directory
+        cover_src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'images', 'cover.jpg')
+        cover_dst = os.path.join(self.output_dir, 'cover.jpg')
+        if os.path.exists(cover_src):
+            import shutil
+            shutil.copy2(cover_src, cover_dst)
         else:
-            date_info = f"Downloaded: {self.generator.download_date}"
+            print(f"  Warning: cover image not found at {cover_src}")
 
-        content = f"""\
+        # Create cover HTML that displays the image
+        content = """\
 <html>
   <head>
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
+    <style>
+      body { margin: 0; padding: 0; text-align: center; }
+      img { max-width: 100%; height: auto; }
+    </style>
   </head>
   <body>
-    <h1>Lemma Greek{" Basic" if not self._is_full_build else ""}</h1>
-    <h3>From {source_desc}</h3>
-    <h3>A Lemma Project</h3>
-    <p>{date_info}</p>
+    <img src="cover.jpg" alt="Lemma Greek Dictionary" />
   </body>
 </html>
 """
@@ -721,10 +730,17 @@ class HtmlGenerator:
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
   </head>
   <body>
-    <h2>Copyright Notice</h2>
-    <p>This dictionary is created from Wiktionary data processed by Kaikki.</p>
-    <p>Wiktionary content is available under the Creative Commons Attribution-ShareAlike License.</p>
-    <p>Dictionary compilation by Lemma, {year}</p>
+    <h2>Copyright</h2>
+    <p>Copyright {year} Francisco Riordan. All rights reserved.</p>
+    <p>Dictionary compiled by <a href="https://github.com/ciscoriordan/lemma">Lemma</a>.</p>
+    <p>MOBI generated by <a href="https://github.com/ciscoriordan/kindling">Kindling</a> by Francisco Riordan.</p>
+    <h2>Data Sources</h2>
+    <p>Dictionary content derived from <a href="https://en.wiktionary.org/">Wiktionary</a>,
+    available under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
+    Machine-readable data provided by <a href="https://kaikki.org/">Kaikki.org</a>.</p>
+    <p>Inflection data from <a href="https://github.com/ciscoriordan/dilemma">Dilemma</a> Greek lemmatizer by Francisco Riordan.</p>
+    <p>Word frequency data from <a href="https://github.com/hermitdave/FrequencyWords">FrequencyWords</a> (OpenSubtitles 2018 corpus, MIT License).</p>
+    <h2>Build Info</h2>
     <p>Wiktionary data extracted: {extraction_date}</p>
     <p>Dictionary created: {self.generator.download_date}</p>
   </body>
@@ -747,20 +763,20 @@ class HtmlGenerator:
     <meta content="text/html; charset=utf-8" http-equiv="content-type">
   </head>
   <body>
-    <h2>How to Use Lemma Greek{" Basic" if not self._is_full_build else ""}</h2>
-    <p>This is a {dict_type} dictionary with Modern Greek words from {source_desc} Wiktionary.</p>
-    <h3>Features:</h3>
+    <h2>How to Use Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary</h2>
+    <span>This is a {dict_type} dictionary with Modern Greek words from {source_desc} Wiktionary.</span>
+    <br><h3>Features</h3>
     <ul>
       <li>Look up any Greek word while reading</li>
       <li>Inflected forms automatically redirect to their lemma</li>
       <li>Includes part of speech information</li>
     </ul>
-    <h3>To set as default Greek dictionary:</h3>
-    <ol>
+    <br><h3>To Set as Default Greek Dictionary</h3>
+    <ul>
       <li>Look up any Greek word in your book</li>
       <li>Tap the dictionary name in the popup</li>
-      <li>Select "Lemma Greek{" Basic" if not self._is_full_build else ""}"</li>
-    </ol>
+      <li>Select "Lemma Greek{" Basic" if not self._is_full_build else ""} Dictionary"</li>
+    </ul>
   </body>
 </html>
 """
@@ -777,7 +793,7 @@ class HtmlGenerator:
             edition_tag = ""
 
         unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek{edition}"
+        display_title = f"Lemma Greek{edition} Dictionary"
 
         date_str = self.generator.extraction_date or self.generator.download_date
         title_with_date = display_title
@@ -791,12 +807,15 @@ class HtmlGenerator:
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId">
   <metadata>
     <dc:title>{title_with_date}</dc:title>
-    <dc:creator opf:role="aut">Lemma</dc:creator>
+    <dc:creator opf:role="aut">Francisco Riordan</dc:creator>
     <dc:language>el</dc:language>
+    <dc:publisher>Lemma</dc:publisher>
+    <dc:rights>Creative Commons Attribution-ShareAlike 4.0 International</dc:rights>
     <dc:date>{self.generator.download_date}</dc:date>
     <dc:identifier id="BookId" opf:scheme="UUID">{unique_id}-{self.generator.download_date}</dc:identifier>
     <meta name="wiktionary-extraction-date" content="{self.generator.extraction_date or 'Unknown'}" />
     <meta name="dictionary-name" content="{display_title}" />
+    <meta name="cover" content="cover-image" />
     <x-metadata>
       <DictionaryInLanguage>el</DictionaryInLanguage>
       <DictionaryOutLanguage>{out_lang}</DictionaryOutLanguage>
@@ -807,6 +826,9 @@ class HtmlGenerator:
     <item id="ncx"
           href="toc.ncx"
           media-type="application/x-dtbncx+xml" />
+    <item id="cover-image"
+          href="cover.jpg"
+          media-type="image/jpeg" />
     <item id="cover"
           href="cover.html"
           media-type="application/xhtml+xml" />
@@ -827,6 +849,7 @@ class HtmlGenerator:
     <itemref idref="content"/>
   </spine>
   <guide>
+    <reference type="cover" title="Cover" href="cover.html"/>
     <reference type="index" title="IndexName" href="content.html"/>
   </guide>
 </package>
@@ -846,7 +869,7 @@ class HtmlGenerator:
             edition = ""
             edition_tag = ""
         unique_id = f"LemmaGreek{edition_tag}{source_name.upper().replace('-', '')}"
-        display_title = f"Lemma Greek{edition}"
+        display_title = f"Lemma Greek{edition} Dictionary"
 
         content = f"""\
 <?xml version="1.0" encoding="UTF-8"?>

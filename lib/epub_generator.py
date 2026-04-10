@@ -43,7 +43,7 @@ class EpubGenerator:
             zf.write(opf_path, 'OEBPS/content.opf', compress_type=zipfile.ZIP_DEFLATED)
 
             # Add the other content files into OEBPS/
-            content_files = ['toc.ncx', 'cover.html', 'usage.html', 'copyright.html', 'content.html']
+            content_files = ['toc.ncx', 'cover.jpg', 'cover.html', 'usage.html', 'copyright.html', 'content.html']
             for filename in content_files:
                 filepath = os.path.join(self.output_dir, filename)
                 if os.path.exists(filepath):

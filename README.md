@@ -19,8 +19,8 @@ A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K infl
 2. **Open the Kindle drive** on your computer
 3. **Navigate to the `documents/dictionaries` folder** on your Kindle
    - If the `dictionaries` folder doesn't exist, create it inside `documents`
-4. **Copy the `.mobi` file(s)** from the `/dist` folder to `documents/dictionaries`
-   - To generate `.mobi` files for sideloading, run with the `-m` flag (see below)
+4. **Download the `.mobi` file(s)** from [GitHub Releases](https://github.com/ciscoriordan/lemma/releases) and copy them to `documents/dictionaries`
+   - Alternatively, you can build `.mobi` files locally by running with the `-m` flag (see below)
 5. **Safely eject your Kindle** from your computer
 6. **Restart your Kindle**:
    - Hold the power button for 40 seconds, or
@@ -37,7 +37,7 @@ A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K infl
 
 ## Pre-built Dictionaries
 
-Ready-to-use dictionary files are available in the `/dist` folder:
+Ready-to-use dictionary files are available on the [Releases page](https://github.com/ciscoriordan/lemma/releases):
 
 ### Greek-English Dictionary
 

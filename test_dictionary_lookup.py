@@ -36,7 +36,7 @@ KNOWN_LOOKUPS = [
     ("τρώει", "τρώω", "present 3sg of 'eat'"),
     ("έτρωγα", "τρώω", "imperfect 1sg of 'eat'"),
     ("φάει", "τρώω", "subjunctive 3sg of 'eat'"),
-    ("πήγα", "πάω", "aorist 1sg of 'go' (πάω more frequent than πηγαίνω)"),
+    ("πήγα", "πηγαίνω", "aorist 1sg of 'go'"),
     ("πηγαίνει", "πηγαίνω", "present 3sg of 'go'"),
     ("είναι", "είμαι", "present 3sg of 'be'"),
     ("ήταν", "είμαι", "imperfect 3sg of 'be'"),
