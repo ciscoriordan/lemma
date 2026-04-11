@@ -12,6 +12,7 @@
 #
 
 import json
+import os
 
 
 # Defaults match the basic edition's current content. The pro build overrides
@@ -22,6 +23,9 @@ BASIC_DEFAULTS = {
     # override get "Lemma Greek Dictionary", both computed from the build
     # flavor in html_generator._default_edition_name().
     "edition_name": None,
+    # cover_path is None by default so basic builds use lemma/images/cover.jpg.
+    # Pro builds set it to a path relative to the front_matter.json file.
+    "cover_path": None,
     "tagline": (
         "A Greek-English dictionary built from English Wiktionary. "
         "Look up any Greek word while reading, inflected forms "
@@ -97,6 +101,11 @@ def load_front_matter(path=None):
 
     If `path` is None, returns a deep copy of BASIC_DEFAULTS. Otherwise reads
     the JSON file at `path` and deep-merges it on top of BASIC_DEFAULTS.
+
+    Any relative `cover_path` in the override file is resolved to an absolute
+    path relative to the override file's directory, so the lemma generator
+    can copy the right image regardless of what the current working directory
+    is when lemma runs.
     """
     base = json.loads(json.dumps(BASIC_DEFAULTS))  # deep copy via JSON roundtrip
     if path is None:
@@ -105,4 +114,8 @@ def load_front_matter(path=None):
         overrides = json.load(f)
     if not isinstance(overrides, dict):
         raise ValueError(f"Front-matter file {path} must contain a JSON object")
+    if isinstance(overrides.get("cover_path"), str) and not os.path.isabs(overrides["cover_path"]):
+        overrides["cover_path"] = os.path.abspath(
+            os.path.join(os.path.dirname(os.path.abspath(path)), overrides["cover_path"])
+        )
     return _deep_merge(base, overrides)

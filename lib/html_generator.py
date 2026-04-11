@@ -692,27 +692,39 @@ class HtmlGenerator:
         return pos_display
 
     def _create_cover(self):
-        # Copy cover image to output directory
-        cover_src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'images', 'cover.jpg')
+        # Resolve cover source: front-matter override first, then lemma default
+        override = self.generator.front_matter.get('cover_path')
+        default_src = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'images', 'cover.jpg'
+        )
+        cover_src = override if override else default_src
         cover_dst = os.path.join(self.output_dir, 'cover.jpg')
         if os.path.exists(cover_src):
             import shutil
             shutil.copy2(cover_src, cover_dst)
+            if override:
+                print(f"  Cover: {cover_src}")
         else:
             print(f"  Warning: cover image not found at {cover_src}")
 
-        # Create cover HTML that displays the image
+        # Create cover HTML that displays the image. A forced page break after
+        # the image keeps the next spine entry (usage.html) from bleeding
+        # through on Kindle dictionaries, where the cover page would otherwise
+        # flow into the following content when the cover is shorter than the
+        # viewport.
         content = """\
 <html>
   <head>
     <meta content="text/html; charset=utf-8" http-equiv="content-type" />
     <style>
-      body { margin: 0; padding: 0; text-align: center; }
-      img { max-width: 100%; height: auto; }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body { text-align: center; page-break-after: always; }
+      img { max-width: 100%; max-height: 100vh; height: auto; page-break-after: always; }
     </style>
   </head>
   <body>
-    <img src="cover.jpg" alt="Lemma Greek Dictionary" />
+    <div style="page-break-after: always;"><img src="cover.jpg" alt="Lemma Greek Dictionary" /></div>
   </body>
 </html>
 """
