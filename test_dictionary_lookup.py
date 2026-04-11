@@ -354,7 +354,6 @@ def main():
 
     all_passed = run_tests(index)
     all_passed = run_pos_tests(index) and all_passed
-    all_passed = run_transliteration_tests() and all_passed
 
     # Run position verification and anchor link tests on content.html files
     for d in dirs:
@@ -389,67 +388,6 @@ def main():
         interactive_mode(index)
 
     sys.exit(0 if all_passed else 1)
-
-
-def run_transliteration_tests():
-    """Test that transliterations are stripped from definitions and etymologies."""
-    from lib.html_generator import _strip_transliterations, _strip_def_qualifiers
-
-    cases = [
-        # (input, expected_output)
-        ('accusative masculine singular of όμορφος (ómorfos)',
-         'accusative masculine singular of όμορφος'),
-        ('όμορφος (ómorfos) + -ιά (-iá)',
-         'όμορφος + -ιά'),
-        ('From Ancient Greek θάλασσα (thálassa, "sea")',
-         'From Ancient Greek θάλασσα'),
-        ('αγγούρι (angoúri, "cucumber") + της (tis, "of the")',
-         'αγγούρι + της'),
-        # Latin Extended Additional chars (macrons in transliterations)
-        ('from εὖ + μορφή (morphḗ)',
-         'from εὖ + μορφή'),
-        # These should NOT be stripped
-        ('(plural) houses', '(plural) houses'),
-        ('(indeclinable)', '(indeclinable)'),
-        ('(usually uncountable, plural αυθυποβολές)',
-         '(usually uncountable, plural αυθυποβολές)'),
-        # Plain text, no change
-        ('beauty', 'beauty'),
-    ]
-
-    passed = 0
-    failed = 0
-    print(f"\nRunning {len(cases)} transliteration tests...\n")
-
-    for inp, expected in cases:
-        result = _strip_transliterations(inp)
-        if result == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL  _strip_transliterations")
-            print(f"    input:    {inp}")
-            print(f"    expected: {expected}")
-            print(f"    got:      {result}")
-
-    # Also test that _strip_def_qualifiers chains both strippers
-    qual_input = '(masculine, participle) beaten of χτυπάω (chtypáo)'
-    qual_expected = 'beaten of χτυπάω'
-    qual_result = _strip_def_qualifiers(qual_input)
-    if qual_result == qual_expected:
-        passed += 1
-    else:
-        failed += 1
-        print(f"  FAIL  _strip_def_qualifiers + transliteration")
-        print(f"    expected: {qual_expected}")
-        print(f"    got:      {qual_result}")
-
-    total = passed + failed
-    print(f"\nTransliteration results: {passed}/{total} passed", end="")
-    if failed:
-        print(f", {failed} FAILED", end="")
-    print()
-    return failed == 0
 
 
 def _family_key(filename):

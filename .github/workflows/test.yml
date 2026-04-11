@@ -11,13 +11,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: lemma
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ciscoriordan/kindling
+          path: kindling
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Wire local kindling
+        working-directory: lemma
+        run: KINDLING_PATH=$GITHUB_WORKSPACE/kindling ./scripts/setup-local-kindling.sh
+
+      - name: Build release
+        working-directory: lemma
+        run: cargo build --release
+
       - name: Build basic dictionary
-        run: python3 greek_kindle_dictionary.py
+        working-directory: lemma
+        run: ./target/release/lemma
 
       - name: Run tests
+        working-directory: lemma
         run: python3 test_dictionary_lookup.py 'lemma_greek_en_*_basic'

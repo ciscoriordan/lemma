@@ -39,3 +39,7 @@ __pycache__/
 # Build outputs
 dist/
 iliad_polylas/
+
+# Rust
+target/
+.cargo/config.toml
