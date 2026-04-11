@@ -452,6 +452,38 @@ def run_transliteration_tests():
     return failed == 0
 
 
+def _family_key(filename):
+    """Return the filename family key with the trailing date stamp stripped.
+
+    A "family" is the stable identity of a dictionary across versions, e.g.
+    both 'lemma_greek_en_20260409.mobi' and 'lemma_greek_en_20260410.mobi'
+    belong to family 'lemma_greek_en.mobi', while
+    'lemma_greek_en_20260410_basic.mobi' belongs to 'lemma_greek_en_basic.mobi'.
+
+    The date stamp is an 8-digit YYYYMMDD preceded by an underscore. It can
+    appear anywhere in the basename (typically just before an optional
+    variant suffix like '_basic').
+    """
+    base = os.path.basename(filename)
+    # Strip a trailing or embedded _YYYYMMDD segment.
+    stripped = re.sub(r'_\d{8}(?=(_|\.|$))', '', base)
+    return stripped
+
+
+def _dedupe_to_newest_per_family(mobi_files):
+    """Keep only the newest file per family, by filesystem mtime.
+
+    Stale older versions in dist/ should not gate deploys. We sort by mtime
+    (newest first) and pick the first file we see per family key.
+    """
+    newest = {}
+    for path in sorted(mobi_files, key=lambda p: os.path.getmtime(p), reverse=True):
+        key = _family_key(path)
+        if key not in newest:
+            newest[key] = path
+    return sorted(newest.values())
+
+
 def run_mobi_validation_tests(mobi_files):
     """Validate MOBI file structure for dictionary recognition.
 
@@ -460,15 +492,23 @@ def run_mobi_validation_tests(mobi_files):
     with dictionary type, EXTH records with language metadata, and INDX
     records for the lookup index.
 
-    Also checks for PalmDB name uniqueness, which is critical - duplicate
-    PalmDB names cause the Kindle's FSCK to rename files, making them
-    invisible in the dictionary list.
+    Also checks for PalmDB name uniqueness across distinct filename
+    families (a "family" is a filename with its _YYYYMMDD date stamp
+    stripped). Duplicate PalmDB names across different dictionaries cause
+    the Kindle's FSCK to rename files, making them invisible in the
+    dictionary list. Duplicate names within the same family are expected
+    (they are just different builds of the same dictionary) and are
+    ignored; we only validate the newest file per family.
     """
     import struct
 
     passed = 0
     failed = 0
-    palmdb_names = {}  # name -> filepath, for uniqueness check
+    palmdb_names = {}  # name -> filepath, for uniqueness check (keyed by family)
+
+    # Dedupe: only validate the newest file per family. Stale older builds in
+    # dist/ are not relevant to whether today's build will deploy cleanly.
+    mobi_files = _dedupe_to_newest_per_family(mobi_files)
 
     print(f"\nRunning MOBI validation on {len(mobi_files)} file(s)...\n")
 
@@ -510,15 +550,20 @@ def run_mobi_validation_tests(mobi_files):
         if len(palmdb_name) > 31:
             errors.append(f"PalmDB name too long ({len(palmdb_name)} bytes, max 31)")
 
-        # Check PalmDB name uniqueness
-        if palmdb_name in palmdb_names:
+        # Check PalmDB name uniqueness across distinct filename families.
+        # Two files in the same family (same dictionary, different build dates)
+        # are expected to share a PalmDB name, because kindling derives it from
+        # the stable OPF title. Only a collision across different families is a
+        # real problem on the device.
+        family = _family_key(mobi_path)
+        if palmdb_name in palmdb_names and palmdb_names[palmdb_name][0] != family:
             errors.append(
                 f"PalmDB name '{palmdb_name}' conflicts with "
-                f"'{os.path.basename(palmdb_names[palmdb_name])}' - "
+                f"'{os.path.basename(palmdb_names[palmdb_name][1])}' - "
                 f"Kindle FSCK will rename both files, hiding them from the dictionary list"
             )
         else:
-            palmdb_names[palmdb_name] = mobi_path
+            palmdb_names[palmdb_name] = (family, mobi_path)
 
         # 2. Record 0 / MOBI header checks
         if num_records > 0:
@@ -577,20 +622,38 @@ def run_mobi_validation_tests(mobi_files):
                                 errors.append("EXTH 532 (DictionaryOutLanguage) missing")
 
                     # 4. INDX record checks
+                    #
+                    # The MOBI header field at offset 0x50 is "First Non-book
+                    # index" per the MobileRead MOBI spec: it's the first
+                    # record that is not part of the compressed text. It is
+                    # NOT guaranteed to be the first INDX record. Kindle
+                    # dictionaries commonly place cover / HD-image-container
+                    # records between the text and the INDX records, so the
+                    # record at first_non_book is often a JPEG. The Kindle
+                    # finds the INDX section via EXTH and header pointers,
+                    # not by positional assumption.
+                    #
+                    # So we scan the range [first_non_book, num_records) for
+                    # any record whose payload begins with the 'INDX' magic.
+                    # If none is found, the dictionary truly has no index
+                    # and is broken. If at least one is found, it is fine.
                     first_non_book = struct.unpack_from('>I', rec0, 80)[0]
-                    if first_non_book < num_records:
-                        indx_offset = struct.unpack_from('>I', data, 78 + first_non_book * 8)[0]
-                        if indx_offset + 4 <= len(data):
-                            indx_magic = data[indx_offset:indx_offset + 4]
-                            if indx_magic != b'INDX':
-                                errors.append(
-                                    f"First non-book record ({first_non_book}) is not INDX "
-                                    f"(got {indx_magic})"
-                                )
-                        else:
-                            errors.append(f"INDX record offset out of bounds")
-                    else:
-                        errors.append(f"First non-book record ({first_non_book}) >= total records ({num_records})")
+                    found_indx = False
+                    for rec_idx in range(first_non_book, num_records):
+                        rec_off_pos = 78 + rec_idx * 8
+                        if rec_off_pos + 4 > len(data):
+                            break
+                        rec_off = struct.unpack_from('>I', data, rec_off_pos)[0]
+                        if rec_off + 4 > len(data):
+                            continue
+                        if data[rec_off:rec_off + 4] == b'INDX':
+                            found_indx = True
+                            break
+                    if not found_indx:
+                        errors.append(
+                            f"No INDX record found after text section "
+                            f"(scanned records {first_non_book}..{num_records - 1})"
+                        )
 
         if errors:
             failed += 1
