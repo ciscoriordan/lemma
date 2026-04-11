@@ -772,7 +772,7 @@ class HtmlGenerator:
         # blank line too.
         lines = []
         lines.append("    <h2>Copyright</h2>")
-        lines.append(f"    Copyright {year} {_escape_html(holder)}. All rights reserved.<br />")
+        lines.append(f"    \u00a9 {year} {_escape_html(holder)}. All rights reserved.<br />")
         lines.append("    <br />")
         for tool in tools:
             role = _escape_html(tool.get("role", ""))
