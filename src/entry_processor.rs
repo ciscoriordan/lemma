@@ -955,6 +955,7 @@ pub fn lower_first(s: &str) -> String {
     py_lower(s)
 }
 
+// Mirrors CPython str.lower() Final_Sigma rule (Unicode SpecialCasing.txt, condition Final_Sigma, standard reference D135).
 pub fn py_lower(s: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     let n = chars.len();
@@ -983,6 +984,65 @@ pub fn py_lower(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::py_lower;
+
+    // Each expected value below was produced by running CPython 3
+    // `str.lower()` on the exact input string and pasting the result
+    // verbatim. Do not hand-edit expected values: regenerate them from
+    // CPython if a fixture changes.
+    #[test]
+    fn py_lower_matches_cpython_str_lower() {
+        let cases: &[(&str, &str, &str)] = &[
+            // Word-final sigma: plain capital noun (Σ -> ς).
+            ("ΛΟΓΟΣ", "λογος", "word-final sigma"),
+            // Two medial sigmas plus one final: ΣΣ mid-word stay as σσ,
+            // trailing Σ becomes ς.
+            ("ΟΔΥΣΣΕΥΣ", "οδυσσευς", "two medial + final sigma"),
+            // Common noun with final sigma.
+            ("ΑΝΘΡΩΠΟΣ", "ανθρωπος", "word-final sigma in common noun"),
+            // No sigma at all - plural of the above.
+            ("ΑΝΘΡΩΠΟΙ", "ανθρωποι", "no sigma present"),
+            // Medial sigma + final sigma.
+            ("ΚΟΣΜΟΣ", "κοσμος", "medial + final sigma"),
+            // Double sigma mid-word, no trailing sigma.
+            ("ΘΑΛΑΣΣΑ", "θαλασσα", "double sigma mid-word"),
+            // Standalone capital sigma: CPython returns σ (not ς) because
+            // Final_Sigma requires a *preceding* cased character, and a
+            // lone Σ has none.
+            ("Σ", "σ", "single standalone capital sigma"),
+            // Initial sigma (medial) plus final sigma.
+            ("ΣΟΦΟΣ", "σοφος", "initial + final sigma"),
+            // Abbreviation with trailing period: the '.' is not cased, so
+            // Final_Sigma still fires and the Σ becomes ς.
+            ("ΑΡΣ.", "αρς.", "sigma before non-cased '.' still final"),
+            // Already-lowercase polytonic word with final sigma and a
+            // trailing period - should be identity (no capitals).
+            ("ἀνθρώπους.", "ἀνθρώπους.", "polytonic lowercase + period"),
+            // Already-lowercase polytonic word, final sigma preserved.
+            ("πολύς", "πολύς", "lowercase polytonic identity"),
+            // All-capitals monotonic -> lowercase with final sigma.
+            ("ΠΟΛΥΣ", "πολυς", "capital monotonic -> final sigma"),
+            // Plain ASCII fast path.
+            ("hello", "hello", "plain ASCII lowercase identity"),
+            // Mixed-case ASCII with a space.
+            ("Hello World", "hello world", "mixed-case ASCII with space"),
+            // Capital with accent and final sigma (exercises both the
+            // accent fold and the Final_Sigma rule in one word).
+            ("ΆΝΘΡΩΠΟΣ", "άνθρωπος", "accented capital + final sigma"),
+        ];
+        for (input, expected, label) in cases {
+            let got = py_lower(input);
+            assert_eq!(
+                &got, expected,
+                "py_lower({:?}) mismatch ({}): expected {:?}, got {:?}",
+                input, label, expected, got
+            );
+        }
+    }
 }
 
 fn is_cased(c: char) -> bool {
