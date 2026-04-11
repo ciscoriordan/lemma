@@ -4,7 +4,7 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
 </p>
 
-A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, ~7,000x faster kindlegen replacement).
+A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, ~7,000x faster kindlegen replacement). The generator itself is written in Rust for fast builds of the full dictionary.
 
 | [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
 |:---|:---|
@@ -59,33 +59,43 @@ Ready-to-use dictionary files are available on the [Releases page](https://githu
 
 ### Prerequisites
 
-- Python 3.8+
-- [Kindling](https://github.com/ciscoriordan/kindling) (optional, only needed for `.mobi` generation with `-m` flag)
+- Rust 1.80+ (edition 2024)
+- A local checkout of [Kindling](https://github.com/ciscoriordan/kindling), since it is not yet published to crates.io. This is required to build lemma itself - lemma uses Kindling as a library for MOBI generation, and the MOBI step is now always invoked via the library (there is no shell-out to `kindling-cli`).
 - Works on macOS, Linux, and Windows
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Clone both repos side by side
 git clone https://github.com/ciscoriordan/lemma.git
+git clone https://github.com/ciscoriordan/kindling.git
 cd lemma
 
+# Wire up the local kindling checkout. This writes a gitignored
+# .cargo/config.toml that patches crates.io for you.
+./scripts/setup-local-kindling.sh
+# (or set KINDLING_PATH=/path/to/kindling before running it)
+
+# Release build
+cargo build --release
+
 # Run the generator (produces EPUB by default)
-python3 greek_kindle_dictionary.py [options]
-# On Windows, use: python greek_kindle_dictionary.py [options]
+./target/release/lemma [options]
 ```
+
+Once Kindling is published to crates.io, `./scripts/setup-local-kindling.sh` becomes optional: the `kindling = "0.9"` line in `Cargo.toml` will resolve directly.
 
 ### Options
 
 ```bash
 # Generate dictionary (EPUB output)
-python3 greek_kindle_dictionary.py
+cargo run --release
 
 # Also generate .mobi for sideloading
-python3 greek_kindle_dictionary.py -m
+cargo run --release -- -m
 
 # Generate a test dictionary with only 10% of entries
-python3 greek_kindle_dictionary.py -l 10
+cargo run --release -- -l 10
 ```
 
 ### Command Line Arguments
@@ -135,7 +145,7 @@ The generator also automatically looks for `mg_ranked_forms.json` (pre-ranked in
 
 #### Lemma Equivalences
 
-Wiktionary and Dilemma sometimes disagree on the canonical lemma for a word (e.g., Wiktionary uses `τρώω` for "eat" while Dilemma files all 165 inflections under `τρώγω`). To bridge this, run:
+Wiktionary and Dilemma sometimes disagree on the canonical lemma for a word (e.g., Wiktionary uses `τρώω` for "eat" while Dilemma files all 165 inflections under `τρώγω`). To bridge this, run the (still Python) helper script:
 
 ```bash
 python3 generate_mg_equivalences.py
@@ -162,7 +172,7 @@ The dictionaries include:
 
 ### Inflection Limit
 
-Each headword includes up to 255 unique inflected forms (`MAX_INFLECTIONS` in `lib/html_generator.py`), ranked by corpus frequency when pre-ranked forms from Dilemma are available. Use `-i N` to adjust.
+Each headword includes up to 255 unique inflected forms (`MAX_INFLECTIONS` in `src/html_gen.rs`), ranked by corpus frequency when pre-ranked forms from Dilemma are available. Use `-i N` to adjust.
 
 Pro builds also include up to 255 polytonic variants per headword (`MAX_POLYTONIC`), sourced from attested forms in Greek Wikisource via Dilemma's `mg_polytonic_ranked.json`. This enables lookups in polytonic Modern Greek texts (pre-1982 orthography, Katharevousa literature, etc.).
 
