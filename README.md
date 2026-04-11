@@ -96,6 +96,7 @@ python3 greek_kindle_dictionary.py -l 10
 - `--links`: Enable clickable cross-references between entries
 - `--etymology`: Include etymology information in entries
 - `--polytonic`: Add polytonic breathing/accent variants as inflections, for looking up words in polytonic Modern Greek books. Increases file size.
+- `--front-matter PATH`: Override the copyright/usage front-matter fields (edition name, tagline, features, copyright holder, extra copyright lines, data sources) from a JSON file. Unspecified fields fall through to the built-in basic-edition defaults. Used by downstream pro builds to inject their own content without touching lemma templates.
 - `-h, --help`: Show help message
 
 ## Data Sources

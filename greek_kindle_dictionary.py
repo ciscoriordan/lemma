@@ -66,6 +66,19 @@ def main():
         help="Add polytonic breathing/accent variants as inflections (for polytonic MG books)",
     )
 
+    parser.add_argument(
+        "--front-matter",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a JSON file that overrides front-matter fields "
+            "(edition_name, tagline, copyright, data_sources, features). "
+            "Unspecified fields fall through to built-in basic-edition defaults. "
+            "Used by lemma_pro to inject pro-specific copyright and usage content."
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.limit is not None:
@@ -80,6 +93,7 @@ def main():
         enable_links=args.links,
         enable_etymology=args.etymology,
         enable_polytonic=args.polytonic,
+        front_matter_path=args.front_matter,
     )
     generator.generate()
 

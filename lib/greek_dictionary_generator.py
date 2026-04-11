@@ -12,6 +12,7 @@ from lib.dilemma_inflections import DilemmaInflections
 from lib.downloader import Downloader
 from lib.entry_processor import EntryProcessor
 from lib.epub_generator import EpubGenerator
+from lib.front_matter import load_front_matter
 from lib.html_generator import HtmlGenerator
 from lib.mobi_generator import MobiGenerator
 
@@ -19,7 +20,7 @@ from lib.mobi_generator import MobiGenerator
 class GreekDictionaryGenerator:
     def __init__(self, source_lang='en', limit_percent=None, generate_mobi=False,
                  max_inflections=None, enable_links=False, enable_etymology=False,
-                 enable_polytonic=False):
+                 enable_polytonic=False, front_matter_path=None):
         if source_lang not in ('en', 'el'):
             raise ValueError("Source language must be 'en' or 'el'")
         self.source_lang = source_lang
@@ -36,6 +37,8 @@ class GreekDictionaryGenerator:
         self._build_tag = "_basic" if not self.is_full_build else ""
         self.output_dir = f"lemma_greek_{self.source_lang}_{self.download_date}{self._build_tag}"
         self.dilemma_inflections = None
+        self.front_matter_path = front_matter_path
+        self.front_matter = load_front_matter(front_matter_path)
 
         # Ensure download_date is set
         if not self.download_date:
@@ -47,6 +50,13 @@ class GreekDictionaryGenerator:
         print(f"  Download date: {self.download_date}")
         if limit_percent:
             print(f"  Word limit: {limit_percent}% of entries")
+        if front_matter_path:
+            print(f"  Front matter: {front_matter_path}")
+        edition_preview = (
+            self.front_matter.get("edition_name")
+            or f"Lemma Greek{' Basic' if not self.is_full_build else ''} Dictionary"
+        )
+        print(f"  Edition: {edition_preview}")
 
     def generate(self):
         print("Lemma - Greek Kindle Dictionary Generator")
