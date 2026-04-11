@@ -1,0 +1,74 @@
+// Lemma - Greek Kindle Dictionary Generator.
+// CLI entry point.
+
+use clap::Parser;
+use lemma::generator::{self, GeneratorOptions};
+use std::path::PathBuf;
+
+#[derive(Parser, Debug)]
+#[command(about = "Lemma - Greek Dictionary Generator. Produces EPUB and optional MOBI for sideloading.")]
+struct Cli {
+    /// Source Wiktionary language: 'en' (English) or 'el' (Greek).
+    #[arg(short = 's', long = "source", default_value = "en")]
+    source: String,
+
+    /// Limit to first PERCENT% of words (for testing).
+    #[arg(short = 'l', long = "limit")]
+    limit: Option<f64>,
+
+    /// Max inflections per headword. Default: 255
+    #[arg(short = 'i', long = "inflections")]
+    inflections: Option<usize>,
+
+    /// Also generate .mobi via kindling (for sideloading).
+    #[arg(short = 'm', long = "mobi", default_value_t = false)]
+    mobi: bool,
+
+    /// Enable clickable cross-references between entries.
+    #[arg(long = "links", default_value_t = false)]
+    links: bool,
+
+    /// Include etymology information in entries.
+    #[arg(long = "etymology", default_value_t = false)]
+    etymology: bool,
+
+    /// Add polytonic breathing/accent variants as inflections.
+    #[arg(long = "polytonic", default_value_t = false)]
+    polytonic: bool,
+
+    /// Path to a JSON file that overrides front-matter fields.
+    #[arg(long = "front-matter", value_name = "PATH")]
+    front_matter: Option<PathBuf>,
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    if cli.source != "en" && cli.source != "el" {
+        eprintln!("Error: source must be 'en' or 'el'");
+        std::process::exit(1);
+    }
+
+    if let Some(l) = cli.limit {
+        if l <= 0.0 || l > 100.0 {
+            eprintln!("Error: Limit must be between 0 and 100");
+            std::process::exit(1);
+        }
+    }
+
+    let opts = GeneratorOptions {
+        source_lang: cli.source,
+        limit_percent: cli.limit,
+        generate_mobi: cli.mobi,
+        max_inflections: cli.inflections,
+        enable_links: cli.links,
+        enable_etymology: cli.etymology,
+        enable_polytonic: cli.polytonic,
+        front_matter_path: cli.front_matter,
+    };
+
+    if let Err(e) = generator::run(opts) {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+}
