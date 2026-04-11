@@ -352,7 +352,6 @@ pub fn collect_inflections_from(entry: &Value, word: &str, source_lang: &str) ->
         }
     }
 
-    let mut template_inflections: HashSet<String> = HashSet::new();
     if source_lang == "el" {
         if let Some(templates) = entry.get("head_templates").and_then(|v| v.as_array()) {
             for t in templates {
@@ -360,16 +359,11 @@ pub fn collect_inflections_from(entry: &Value, word: &str, source_lang: &str) ->
                     if is_declension_template(name) {
                         let pattern_name = strip_template_prefix(name);
                         for f in expand_declension(word, pattern_name) {
-                            template_inflections.insert(f);
+                            add(&f, &mut inflections, &mut inflection_set);
                         }
                     }
                 }
             }
-        }
-    }
-    for tf in &template_inflections {
-        if !inflection_set.contains(tf) {
-            inflections.push(tf.clone());
         }
     }
     inflections
@@ -736,7 +730,6 @@ impl<'a> EntryProcessor<'a> {
         }
 
         // Greek declension templates
-        let mut template_inflections: HashSet<String> = HashSet::new();
         if self.source_lang == "el" {
             if let Some(templates) = entry.get("head_templates").and_then(|v| v.as_array()) {
                 for t in templates {
@@ -744,18 +737,11 @@ impl<'a> EntryProcessor<'a> {
                         if is_declension_template(name) {
                             let pattern_name = strip_template_prefix(name);
                             for f in expand_declension(word, pattern_name) {
-                                template_inflections.insert(f);
+                                add(&f, &mut inflections, &mut inflection_set);
                             }
                         }
                     }
                 }
-            }
-        }
-
-        // template forms that weren't already added
-        for tf in &template_inflections {
-            if !inflection_set.contains(tf) {
-                inflections.push(tf.clone());
             }
         }
 
