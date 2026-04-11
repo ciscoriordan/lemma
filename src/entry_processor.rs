@@ -2,6 +2,7 @@
 
 use crate::declension::{expand_declension, is_declension_template, strip_template_prefix};
 use crate::dilemma::DilemmaInflections;
+use rayon::prelude::*;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -96,6 +97,15 @@ pub mod indexmap_lite {
             }
             Some(v)
         }
+        /// Remove multiple keys in bulk. Faster than calling `remove` in a
+        /// loop when removing many keys because the `keys` vector is
+        /// rewritten once instead of linearly compacted per removal.
+        pub fn remove_many(&mut self, keys_to_remove: &std::collections::HashSet<K>) {
+            for k in keys_to_remove {
+                self.map.remove(k);
+            }
+            self.keys.retain(|k| !keys_to_remove.contains(k));
+        }
         pub fn keys(&self) -> std::slice::Iter<'_, K> { self.keys.iter() }
         pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
             self.keys.iter().map(move |k| (k, self.map.get(k).unwrap()))
@@ -129,6 +139,242 @@ pub mod indexmap_lite {
     }
 }
 
+pub struct LineResult {
+    pub line_no: usize,
+    pub skipped: bool,
+    pub parse_error: Option<String>,
+    pub word: String,
+    pub pos: String,
+    pub definitions: Vec<String>,
+    pub examples: Vec<Option<Example>>,
+    pub inflections: Vec<String>,
+    pub etymology: Option<String>,
+    pub head_expansion: Option<String>,
+    pub expanded_from_template: bool,
+    pub form_of_targets: Vec<String>,
+}
+
+fn empty_result(line_no: usize) -> LineResult {
+    LineResult {
+        line_no,
+        skipped: true,
+        parse_error: None,
+        word: String::new(),
+        pos: String::new(),
+        definitions: Vec::new(),
+        examples: Vec::new(),
+        inflections: Vec::new(),
+        etymology: None,
+        head_expansion: None,
+        expanded_from_template: false,
+        form_of_targets: Vec::new(),
+    }
+}
+
+fn build_line_result(line_no: usize, raw_line: &str, source_lang: &str) -> Option<LineResult> {
+    let line = raw_line.trim();
+    if line.is_empty() { return None; }
+
+    let entry: Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(e) => {
+            return Some(LineResult {
+                line_no,
+                skipped: false,
+                parse_error: Some(e.to_string()),
+                ..empty_result(line_no)
+            });
+        }
+    };
+
+    if !is_greek_entry(&entry) { return None; }
+
+    let word = match entry.get("word").and_then(|v| v.as_str()) {
+        Some(w) => w.to_string(),
+        None => return None,
+    };
+    if !contains_greek(&word) { return None; }
+    if contains_non_greek_script(&word) { return None; }
+
+    // Mark that the line passed the processed-count threshold so the caller
+    // can count it (matches Python's `processed_count += 1` placement).
+    let mut result_shell = LineResult {
+        line_no, skipped: true, parse_error: None, ..empty_result(line_no)
+    };
+    result_shell.word = word.clone(); // non-empty signals "counted"
+
+    let pos = entry.get("pos").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+    if should_skip_pos(&pos) { return Some(result_shell); }
+    if word.starts_with('-') || word.ends_with('-') { return Some(result_shell); }
+    if word.chars().count() == 1 {
+        let lower: String = word.chars().flat_map(|c| c.to_lowercase()).collect();
+        if !matches!(lower.as_str(), "ω" | "ο" | "α" | "η") {
+            return Some(result_shell);
+        }
+    }
+
+    // Build the definitions + examples + form_of targets + etymology + inflections.
+    let mut definitions: Vec<String> = Vec::new();
+    let mut form_of_targets: Vec<String> = Vec::new();
+    let mut examples: Vec<Option<Example>> = Vec::new();
+    let mut expanded_from_template = false;
+
+    let senses_opt = entry.get("senses").and_then(|v| v.as_array());
+
+    if let Some(senses) = senses_opt {
+        for sense in senses {
+            if let Some(fol) = sense.get("form_of").and_then(|v| v.as_array()) {
+                for fo in fol {
+                    if let Some(target) = fo.get("word").and_then(|v| v.as_str()) {
+                        if !target.contains(' ') && !form_of_targets.iter().any(|t| t == target) {
+                            form_of_targets.push(target.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(senses) = senses_opt {
+        for sense in senses {
+            let def = extract_definition_from_sense(sense);
+            if !def.trim().is_empty() {
+                definitions.push(def);
+                examples.push(extract_example_from_sense(sense));
+            }
+        }
+    }
+    if definitions.is_empty() {
+        definitions.push("No definition available".to_string());
+        examples.push(None);
+    }
+
+    let mut head_expansion: Option<String> = None;
+    if let Some(templates) = entry.get("head_templates").and_then(|v| v.as_array()) {
+        for t in templates {
+            if let Some(expansion) = t.get("expansion").and_then(|v| v.as_str()) {
+                if !expansion.trim().is_empty() {
+                    head_expansion = Some(expansion.trim().to_string());
+                    break;
+                }
+            }
+        }
+    }
+
+    let inflections = collect_inflections_from(&entry, &word, source_lang);
+
+    if source_lang == "el" {
+        if let Some(templates) = entry.get("head_templates").and_then(|v| v.as_array()) {
+            for t in templates {
+                if let Some(name) = t.get("name").and_then(|v| v.as_str()) {
+                    if is_declension_template(name) {
+                        expanded_from_template = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let etymology = entry.get("etymology_text").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+    Some(LineResult {
+        line_no,
+        skipped: false,
+        parse_error: None,
+        word,
+        pos,
+        definitions,
+        examples,
+        inflections,
+        etymology,
+        head_expansion,
+        expanded_from_template,
+        form_of_targets,
+    })
+}
+
+pub fn collect_inflections_from(entry: &Value, word: &str, source_lang: &str) -> Vec<String> {
+    let mut inflections: Vec<String> = Vec::new();
+    let mut inflection_set: HashSet<String> = HashSet::new();
+
+    fn add(form: &str, inflections: &mut Vec<String>, set: &mut HashSet<String>) {
+        if set.insert(form.to_string()) {
+            inflections.push(form.to_string());
+        }
+    }
+
+    if let Some(forms) = entry.get("forms").and_then(|v| v.as_array()) {
+        for form in forms {
+            if let Some(obj) = form.as_object() {
+                let form_word = obj.get("form").and_then(|v| v.as_str());
+                if let Some(tags) = obj.get("tags").and_then(|v| v.as_array()) {
+                    if tags.iter().any(|t| t.as_str() == Some("romanization")) { continue; }
+                }
+                let fw = match form_word {
+                    Some(f) if !f.is_empty() => f,
+                    _ => continue,
+                };
+                if latin_re().is_match(fw) && !is_loanword(word) { continue; }
+                if fw.starts_with('-') || fw.ends_with('-') { continue; }
+                if fw.starts_with("el-") { continue; }
+                if fw.contains(' ') { continue; }
+                if fw == word { continue; }
+                for expanded in expand_parentheses(fw) {
+                    add(&expanded, &mut inflections, &mut inflection_set);
+                    let capitalized = capitalize_first(&expanded);
+                    if capitalized != expanded {
+                        add(&capitalized, &mut inflections, &mut inflection_set);
+                    }
+                    let lowered = lower_first(&expanded);
+                    if lowered != expanded {
+                        add(&lowered, &mut inflections, &mut inflection_set);
+                    }
+                }
+            } else if let Some(s) = form.as_str() {
+                if s == word { continue; }
+                if latin_re().is_match(s) { continue; }
+                if s.starts_with('-') || s.ends_with('-') { continue; }
+                if s.starts_with("el-") { continue; }
+                if s.contains(' ') { continue; }
+                for expanded in expand_parentheses(s) {
+                    add(&expanded, &mut inflections, &mut inflection_set);
+                    let capitalized = capitalize_first(&expanded);
+                    if capitalized != expanded {
+                        add(&capitalized, &mut inflections, &mut inflection_set);
+                    }
+                    let lowered = lower_first(&expanded);
+                    if lowered != expanded {
+                        add(&lowered, &mut inflections, &mut inflection_set);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut template_inflections: HashSet<String> = HashSet::new();
+    if source_lang == "el" {
+        if let Some(templates) = entry.get("head_templates").and_then(|v| v.as_array()) {
+            for t in templates {
+                if let Some(name) = t.get("name").and_then(|v| v.as_str()) {
+                    if is_declension_template(name) {
+                        let pattern_name = strip_template_prefix(name);
+                        for f in expand_declension(word, pattern_name) {
+                            template_inflections.insert(f);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for tf in &template_inflections {
+        if !inflection_set.contains(tf) {
+            inflections.push(tf.clone());
+        }
+    }
+    inflections
+}
+
 pub struct EntryProcessor<'a> {
     pub entries: EntryMap,
     pub extraction_date: Option<String>,
@@ -158,10 +404,6 @@ impl<'a> EntryProcessor<'a> {
     pub fn process(&mut self) {
         println!("Processing entries...");
 
-        let mut line_count: u64 = 0;
-        let mut error_count: u64 = 0;
-        let mut processed_count: u64 = 0;
-
         let f = match File::open(&self.filename) {
             Ok(f) => f,
             Err(e) => {
@@ -171,69 +413,66 @@ impl<'a> EntryProcessor<'a> {
         };
         let reader = BufReader::new(f);
 
-        for line in reader.lines() {
-            line_count += 1;
-            let line = match line {
-                Ok(l) => l,
-                Err(e) => {
-                    error_count += 1;
-                    if error_count <= 10 {
-                        println!("Error on line {}: {}", line_count, e);
-                    }
-                    continue;
-                }
-            };
-            let line = line.trim();
-            if line.is_empty() { continue; }
+        // Read all lines up front so we can parse in parallel while
+        // preserving sequential merge order (which Python relies on for
+        // duplicate-POS merging and first-seen form_of target resolution).
+        let mut lines: Vec<String> = Vec::new();
+        for l in reader.lines() {
+            match l {
+                Ok(l) => lines.push(l),
+                Err(_) => lines.push(String::new()),
+            }
+        }
+        let line_count = lines.len() as u64;
 
-            let entry: Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(e) => {
-                    error_count += 1;
-                    if error_count <= 10 {
-                        println!("JSON parse error on line {}: {}", line_count, e);
-                    }
-                    continue;
-                }
-            };
-
-            if self.extraction_date.is_none() {
-                if let Some(meta) = entry.get("meta").and_then(|v| v.as_object()) {
-                    for key in ["extracted", "date", "generated", "generation_time", "timestamp", "created"] {
-                        if let Some(v) = meta.get(key).and_then(|v| v.as_str()) {
-                            self.extraction_date = Some(v.to_string());
-                            break;
+        // Snapshot extraction date from the first line's meta field (pre-parallel).
+        if self.extraction_date.is_none() {
+            for line in lines.iter().take(5) {
+                let trimmed = line.trim();
+                if trimmed.is_empty() { continue; }
+                if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+                    if let Some(meta) = v.get("meta").and_then(|v| v.as_object()) {
+                        for key in ["extracted", "date", "generated", "generation_time", "timestamp", "created"] {
+                            if let Some(val) = meta.get(key).and_then(|v| v.as_str()) {
+                                self.extraction_date = Some(val.to_string());
+                                break;
+                            }
                         }
+                        if self.extraction_date.is_some() { break; }
                     }
                 }
             }
+        }
 
-            if !is_greek_entry(&entry) { continue; }
+        let source_lang = self.source_lang.clone();
 
-            let word = match entry.get("word").and_then(|v| v.as_str()) {
-                Some(w) => w.to_string(),
-                None => continue,
-            };
+        // Parallel parse + per-line build. Each line produces an Option<LineResult>.
+        let results: Vec<Option<LineResult>> = lines
+            .par_iter()
+            .enumerate()
+            .map(|(idx, raw_line)| build_line_result(idx, raw_line, &source_lang))
+            .collect();
 
-            if !contains_greek(&word) { continue; }
-            if contains_non_greek_script(&word) { continue; }
+        let mut error_count: u64 = 0;
+        let mut processed_count: u64 = 0;
 
-            processed_count += 1;
-
-            let pos = entry.get("pos").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-
-            if should_skip_pos(&pos) { continue; }
-            if word.starts_with('-') || word.ends_with('-') { continue; }
-
-            // Skip very short words that are likely particles/fragments
-            if word.chars().count() == 1 {
-                let lower: String = word.chars().flat_map(|c| c.to_lowercase()).collect();
-                if !matches!(lower.as_str(), "ω" | "ο" | "α" | "η") {
-                    continue;
+        for r in results {
+            let Some(r) = r else { continue; };
+            if let Some(msg) = r.parse_error {
+                error_count += 1;
+                if error_count <= 10 {
+                    println!("JSON parse error on line {}: {}", r.line_no + 1, msg);
                 }
+                continue;
             }
-
-            self.process_single_entry(&entry, &word, &pos);
+            // Python increments processed_count after greek-script checks but
+            // before the POS/short-word skips. A non-empty word signals the
+            // line passed the first set of checks.
+            if !r.word.is_empty() {
+                processed_count += 1;
+            }
+            if r.skipped { continue; }
+            self.merge_line_result(r);
         }
 
         println!("Processed {} lines with {} errors", line_count, error_count);
@@ -258,6 +497,62 @@ impl<'a> EntryProcessor<'a> {
         self.report_statistics();
     }
 
+    fn merge_line_result(&mut self, r: LineResult) {
+        let word = r.word;
+        let pos = r.pos;
+
+        if !self.entries.contains_key(&word) {
+            self.entries.insert(word.clone(), Vec::new());
+        }
+        let list = self.entries.get_mut(&word).unwrap();
+        let existing_idx = list.iter().position(|e| e.pos == pos);
+
+        if let Some(idx) = existing_idx {
+            let existing = &mut list[idx];
+            while existing.examples.len() < existing.definitions.len() {
+                existing.examples.push(None);
+            }
+            let existing_defs_set: HashSet<String> = existing.definitions.iter().cloned().collect();
+            let mut seen = existing_defs_set;
+            for (d, ex) in r.definitions.into_iter().zip(r.examples.into_iter()) {
+                if !seen.contains(&d) {
+                    seen.insert(d.clone());
+                    existing.definitions.push(d);
+                    existing.examples.push(ex);
+                }
+            }
+            existing.inflections.extend(r.inflections);
+            let mut seen_inf = HashSet::new();
+            existing.inflections.retain(|i| seen_inf.insert(i.clone()));
+            if existing.etymology.is_none() {
+                existing.etymology = r.etymology;
+            }
+            if !existing.expanded_from_template {
+                existing.expanded_from_template = r.expanded_from_template;
+            }
+            if existing.head_expansion.is_none() && r.head_expansion.is_some() {
+                existing.head_expansion = r.head_expansion;
+            }
+            for t in r.form_of_targets {
+                if !existing.form_of_targets.contains(&t) {
+                    existing.form_of_targets.push(t);
+                }
+            }
+        } else {
+            list.push(Entry {
+                pos,
+                definitions: r.definitions,
+                examples: r.examples,
+                etymology: r.etymology,
+                head_expansion: r.head_expansion,
+                inflections: r.inflections,
+                expanded_from_template: r.expanded_from_template,
+                form_of_targets: r.form_of_targets,
+            });
+        }
+    }
+
+    #[allow(dead_code)]
     fn process_single_entry(&mut self, entry: &Value, word: &str, pos: &str) {
         let mut definitions: Vec<String> = Vec::new();
         let mut form_of_targets: Vec<String> = Vec::new();
@@ -654,6 +949,42 @@ pub fn capitalize_first(s: &str) -> String {
 }
 
 pub fn lower_first(s: &str) -> String {
-    // Python's str.lower() lowers all chars; to match "lowered = expanded.lower()"
-    s.chars().flat_map(|c| c.to_lowercase()).collect()
+    // Python's str.lower() is context-sensitive for Greek capital sigma (Σ),
+    // lowering to ς at the end of a word and σ elsewhere. Rust's stdlib
+    // char::to_lowercase() is not context-sensitive, so we replicate the rule.
+    py_lower(s)
+}
+
+pub fn py_lower(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(s.len());
+    for (i, &c) in chars.iter().enumerate() {
+        if c == 'Σ' {
+            // Final if this is the last cased letter in the word-segment, which
+            // Python approximates as: no following cased letter in the string
+            // (Σ→ς when it's the final sigma of a "word"). CPython's rule is
+            // the Unicode Final_Sigma context: Σ is final if preceded by a
+            // cased letter and not followed by a cased letter.
+            let before_cased = chars[..i].iter().rev().any(|ch| is_cased(*ch));
+            let after_cased = chars[i + 1..].iter().any(|ch| is_cased(*ch));
+            let preceded_immediately = i > 0 && is_cased(chars[i - 1]);
+            let _ = preceded_immediately;
+            let _ = n;
+            if before_cased && !after_cased {
+                out.push('ς');
+            } else {
+                out.push('σ');
+            }
+        } else {
+            for lc in c.to_lowercase() {
+                out.push(lc);
+            }
+        }
+    }
+    out
+}
+
+fn is_cased(c: char) -> bool {
+    c.is_alphabetic() && (c.is_lowercase() || c.is_uppercase())
 }

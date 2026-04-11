@@ -229,20 +229,25 @@ impl DilemmaInflections {
     fn load_scored(&mut self, path: &Path) {
         println!("Loading dilemma MG lookup data (scored)...");
         let start = Instant::now();
+        // Parse as Value so preserve_order applies to the top-level object,
+        // matching Python dict insertion order. The inner info objects are
+        // small and dynamic-access is fine.
         let Ok(f) = File::open(path) else { return; };
         let rdr = BufReader::new(f);
         let data: Value = match serde_json::from_reader(rdr) {
             Ok(v) => v,
-            Err(_) => return,
+            Err(e) => {
+                eprintln!("  Error parsing scored data: {}", e);
+                return;
+            }
         };
-        let obj = match data.as_object() {
-            Some(o) => o,
-            None => return,
-        };
+        // Move out of the Value so we can consume (String, Value) tuples
+        // without re-cloning each form. This is the hot path: 2.7M entries.
+        let Value::Object(obj) = data else { return; };
         println!("Parsed {} form-to-lemma entries in {:.1}s", obj.len(), start.elapsed().as_secs_f64());
 
         let mut scored_index: HashMap<String, Vec<(String, i64)>> = HashMap::new();
-        for (form, info) in obj {
+        for (form, info) in obj.into_iter() {
             let info_obj = match info.as_object() {
                 Some(o) => o,
                 None => continue,
@@ -253,12 +258,11 @@ impl DilemmaInflections {
             };
             let confidence = info_obj.get("confidence").and_then(|v| v.as_i64()).unwrap_or(0);
             self.form_to_lemma.insert(form.clone(), lemma.clone());
-            if *form == lemma { continue; }
+            if form == lemma { continue; }
             if form.contains(' ') { continue; }
-            scored_index.entry(lemma).or_default().push((form.clone(), confidence));
             self.form_confidence.insert(form.clone(), confidence);
+            scored_index.entry(lemma).or_default().push((form, confidence));
         }
-        drop(data);
 
         for (lemma, mut form_list) in scored_index {
             form_list.sort_by(|a, b| b.1.cmp(&a.1));

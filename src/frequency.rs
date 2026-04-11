@@ -28,7 +28,7 @@ impl FrequencyRanker {
                 return *v;
             }
         }
-        let lower: String = word.chars().flat_map(|c| c.to_lowercase()).collect();
+        let lower = crate::entry_processor::py_lower(word);
         *self.frequencies.get(&lower).unwrap_or(&0)
     }
 

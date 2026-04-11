@@ -5,6 +5,7 @@ use crate::entry_processor::{Entry, EntryMap, Example};
 use crate::frequency::FrequencyRanker;
 use crate::html_escape::escape_html;
 use chrono::{Datelike, Local};
+use rayon::prelude::*;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -188,10 +189,23 @@ impl<'a> HtmlGenerator<'a> {
         let mut out = BufWriter::new(File::create(&content_path)?);
         out.write_all(html_header().as_bytes())?;
 
+        // Render each entry in parallel to its own String buffer, then write
+        // the buffers in sorted order. This keeps output byte-identical while
+        // using rayon to parallelize the expensive per-entry work (ranking,
+        // polytonic expansion, linkify).
+        let rendered: Vec<Vec<u8>> = sorted_keys
+            .par_iter()
+            .map(|word| {
+                let entries = self.entries.get(word).map(|v| v.as_slice()).unwrap_or(&[]);
+                let mut buf: Vec<u8> = Vec::with_capacity(512);
+                let _ = self.write_entry(&mut buf, word, entries);
+                buf
+            })
+            .collect();
+
         let mut entry_count = 0usize;
-        for word in &sorted_keys {
-            let entries = self.entries.get(word).cloned().unwrap_or_default();
-            self.write_entry(&mut out, word, &entries)?;
+        for buf in &rendered {
+            out.write_all(buf)?;
             entry_count += 1;
             if entry_count % 10000 == 0 {
                 println!("  Processed {}/{} entries...", entry_count, total);
@@ -237,12 +251,18 @@ impl<'a> HtmlGenerator<'a> {
             let best = if targets.len() == 1 {
                 targets[0].clone()
             } else {
+                // Match Python's `max(targets, key=...)` tiebreak: first element wins.
                 let freq = &self.frequency;
-                targets
-                    .iter()
-                    .max_by_key(|t| freq.frequency(t))
-                    .cloned()
-                    .unwrap_or_else(|| targets[0].clone())
+                let mut best = targets[0].clone();
+                let mut best_f = freq.frequency(&best);
+                for t in targets.iter().skip(1) {
+                    let f = freq.frequency(t);
+                    if f > best_f {
+                        best = t.clone();
+                        best_f = f;
+                    }
+                }
+                best
             };
 
             if let Some(parent_entries) = self.entries.get_mut(&best) {
@@ -256,9 +276,8 @@ impl<'a> HtmlGenerator<'a> {
             merged_count += 1;
         }
 
-        for w in to_remove {
-            self.entries.remove(&w);
-        }
+        let set: HashSet<String> = to_remove.into_iter().collect();
+        self.entries.remove_many(&set);
         println!("  Merged {} form-of entries into parent headwords", merged_count);
     }
 
@@ -598,20 +617,20 @@ impl<'a> HtmlGenerator<'a> {
             return entry_inflections.iter().take(max_count).cloned().collect();
         };
 
-        let ranked_lower: HashSet<String> = ranked.iter().map(|f| f.to_lowercase()).collect();
+        let ranked_lower: HashSet<String> = ranked.iter().map(|f| crate::entry_processor::py_lower(f)).collect();
 
         let mut result: Vec<String> = Vec::new();
         let mut result_lower: HashSet<String> = HashSet::new();
 
         for f in entry_inflections {
-            let low = f.to_lowercase();
+            let low = crate::entry_processor::py_lower(f);
             if !ranked_lower.contains(&low) && !result_lower.contains(&low) {
                 result.push(f.clone());
                 result_lower.insert(low);
             }
         }
         for form in ranked {
-            let low = form.to_lowercase();
+            let low = crate::entry_processor::py_lower(form);
             if !result_lower.contains(&low) {
                 result.push(form.clone());
                 result_lower.insert(low);
@@ -943,21 +962,58 @@ fn sanitize_anchor_id(text: &str) -> String {
 }
 
 fn normalize_for_sorting(word: &str) -> String {
-    // lowercase, strip accents, remove non Greek/Latin/digit
-    let lower: String = word.chars().flat_map(|c| c.to_lowercase()).collect();
+    // lowercase (Greek final-sigma aware), strip accents, remove non Greek/Latin/digit
+    let lower = crate::entry_processor::py_lower(word);
     let stripped: String = lower.chars().map(|c| match c {
         'ά' => 'α', 'έ' => 'ε', 'ή' => 'η', 'ί' => 'ι', 'ό' => 'ο', 'ύ' => 'υ', 'ώ' => 'ω',
         'ΐ' => 'ι', 'ΰ' => 'υ', 'ϊ' => 'ι', 'ϋ' => 'υ',
         'Ά' => 'α', 'Έ' => 'ε', 'Ή' => 'η', 'Ί' => 'ι', 'Ό' => 'ο', 'Ύ' => 'υ', 'Ώ' => 'ω',
         _ => c,
     }).collect();
-    let re = Regex::new(r"[^\u0370-\u03FF\u1F00-\u1FFFA-Za-z0-9]").unwrap();
-    re.replace_all(&stripped, "").into_owned()
+    re_non_sort_char().replace_all(&stripped, "").into_owned()
+}
+
+fn re_paren_prefix() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"^\(([^)]+)\)").unwrap())
+}
+fn re_paren_prefix_ws() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"^\(([^)]+)\)\s*").unwrap())
+}
+fn re_strip_translit_a() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"\s*\([^)]*[\u00C0-\u024F\u1E00-\u1EFF][^)]*\)").unwrap())
+}
+fn re_strip_translit_b() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r#"\s*\([^)"]*"[^)]*\)"#).unwrap())
+}
+fn re_head_prefix() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"^\([A-Za-z\u00C0-\u024F\s]+\)\s*").unwrap())
+}
+fn re_head_format() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"^([mfn](?:\s+or\s+[mfn])*)(\s+(?:pl|sg))?(\s+\(.*\))?\s*$").unwrap())
+}
+fn re_non_sort_char() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"[^\u0370-\u03FF\u1F00-\u1FFFA-Za-z0-9]").unwrap())
+}
+fn gender_word_re(ab: &str) -> &'static Regex {
+    static M: OnceLock<Regex> = OnceLock::new();
+    static F: OnceLock<Regex> = OnceLock::new();
+    static N: OnceLock<Regex> = OnceLock::new();
+    match ab {
+        "m" => M.get_or_init(|| Regex::new(r"\bm\b").unwrap()),
+        "f" => F.get_or_init(|| Regex::new(r"\bf\b").unwrap()),
+        _ => N.get_or_init(|| Regex::new(r"\bn\b").unwrap()),
+    }
 }
 
 fn def_has_tag(definition: &str, tag: &str) -> bool {
-    let re = Regex::new(r"^\(([^)]+)\)").unwrap();
-    match re.captures(definition) {
+    match re_paren_prefix().captures(definition) {
         Some(c) => {
             let group = c.get(1).unwrap().as_str();
             group.split(',').any(|t| t.trim().to_lowercase() == tag)
@@ -968,8 +1024,7 @@ fn def_has_tag(definition: &str, tag: &str) -> bool {
 
 fn strip_def_qualifiers(definition: &str) -> String {
     let stripped = strip_transliterations(definition);
-    let re = Regex::new(r"^\(([^)]+)\)\s*").unwrap();
-    match re.captures(&stripped) {
+    match re_paren_prefix_ws().captures(&stripped) {
         None => stripped,
         Some(c) => {
             let group = c.get(1).unwrap().as_str();
@@ -988,10 +1043,8 @@ fn strip_def_qualifiers(definition: &str) -> String {
 }
 
 fn strip_transliterations(text: &str) -> String {
-    let re1 = Regex::new(r"\s*\([^)]*[\u00C0-\u024F\u1E00-\u1EFF][^)]*\)").unwrap();
-    let t1 = re1.replace_all(text, "").into_owned();
-    let re2 = Regex::new(r#"\s*\([^)"]*"[^)]*\)"#).unwrap();
-    re2.replace_all(&t1, "").into_owned()
+    let t1 = re_strip_translit_a().replace_all(text, "").into_owned();
+    re_strip_translit_b().replace_all(&t1, "").into_owned()
 }
 
 fn clean_etymology(text: &str) -> String {
@@ -1013,20 +1066,20 @@ fn strip_head_expansion(head_exp: &str, word: &str) -> String {
     } else if text.starts_with(word) {
         text = text[word.len()..].trim().to_string();
     }
-    let re = Regex::new(r"^\([A-Za-z\u00C0-\u024F\s]+\)\s*").unwrap();
-    re.replace(&text, "").trim().to_string()
+    re_head_prefix().replace(&text, "").trim().to_string()
 }
 
 fn format_head_for_pos(stripped: &str) -> Option<String> {
     if stripped.is_empty() { return None; }
-    let re = Regex::new(r"^([mfn](?:\s+or\s+[mfn])*)(\s+(?:pl|sg))?(\s+\(.*\))?\s*$").unwrap();
-    let caps = re.captures(stripped)?;
+    let caps = re_head_format().captures(stripped)?;
     let mut genders = caps.get(1)?.as_str().to_string();
     let number = caps.get(2).map(|m| m.as_str().trim()).unwrap_or("");
     let parens = caps.get(3).map(|m| m.as_str().trim()).unwrap_or("");
 
+    // Substitute m/f/n gender codes with their full names, as word-boundary
+    // matches so "or" between them isn't touched.
     for (ab, full) in &[("m", "masculine"), ("f", "feminine"), ("n", "neuter")] {
-        let re = Regex::new(&format!(r"\b{}\b", ab)).unwrap();
+        let re = gender_word_re(ab);
         genders = re.replace_all(&genders, *full).into_owned();
     }
     let mut parts = vec![genders];
