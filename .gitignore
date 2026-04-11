@@ -8,6 +8,9 @@ lemma_greek_*/
 !greek_data_en_20250716.jsonl
 !greek_data_el_20250717.jsonl
 
+# Sidecar metadata written next to downloaded Kaikki dumps
+*.jsonl.meta
+
 # Processed entries cache files
 processed_entries_*.json
 

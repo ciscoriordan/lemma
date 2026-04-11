@@ -104,6 +104,13 @@ class GreekDictionaryGenerator:
             print("Error: Download failed")
             sys.exit(1)
 
+        # Propagate the real Kaikki extraction date (from HTTP Last-Modified,
+        # an index-page scrape, a sidecar, or a file mtime) to the generator
+        # so the copyright page can render it. This is distinct from
+        # download_date, which is the build date used in output filenames.
+        if downloader.extraction_date and not self.extraction_date:
+            self.set_extraction_date(downloader.extraction_date)
+
     def _process_entries(self):
         processor = EntryProcessor(self)
         processor.process()

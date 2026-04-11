@@ -75,13 +75,19 @@ class EntryProcessor:
                         print(f"Unexpected error on line {line_count}: {type(e).__name__} - {e}")
                     continue
 
-                # Try to extract the extraction date from first entry's meta field
+                # Try to extract the extraction date from first entry's meta
+                # field. This is a last-resort fallback for dumps that embed
+                # a metadata record; the downloader's HTTP-header / sidecar
+                # cascade is the primary source. Checks several known keys
+                # (Kaikki has used different names over time).
                 if self.generator.extraction_date is None and entry.get("meta"):
                     meta = entry["meta"]
-                    if meta.get("extracted"):
-                        self.generator.set_extraction_date(meta["extracted"])
-                    elif meta.get("date"):
-                        self.generator.set_extraction_date(meta["date"])
+                    for key in ("extracted", "date", "generated",
+                                "generation_time", "timestamp", "created"):
+                        value = meta.get(key)
+                        if value:
+                            self.generator.set_extraction_date(value)
+                            break
 
                 # Only process Greek entries
                 if not self._is_greek_entry(entry):

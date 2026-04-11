@@ -120,6 +120,17 @@ DILEMMA_DATA_DIR=/path/to/dilemma/data
 
 When `DILEMMA_DATA_DIR` is set and `mg_lookup_scored.json` (or `mg_lookup.json`) is found, the generator will supplement kaikki-derived inflections with Dilemma's more comprehensive mappings. Without it, inflections are extracted from kaikki data only.
 
+#### Kaikki Extraction Date
+
+The downloader records the real Kaikki extraction date (the date Wiktionary was snapshotted, not the date you ran the build) and renders it on the dictionary's copyright page. The cascade is:
+
+1. HTTP `Last-Modified` header on the Kaikki JSONL URL (direct download).
+2. The "extracted on YYYY-MM-DD" line on Kaikki's language index page (direct download, fallback).
+3. The file mtime of the local dump (when `KAIKKI_LOCAL_DIR` is used).
+4. The date embedded in the pre-downloaded fallback filename.
+
+On a successful download the downloader writes a tiny `greek_data_<lang>_<date>.jsonl.meta` sidecar next to the dump containing `{"extraction_date": ..., "source_url": ..., "downloaded_at": ...}`. Subsequent builds that reuse the cached dump read the sidecar so the extraction date survives across runs. Sidecars are gitignored.
+
 The generator also automatically looks for `mg_ranked_forms.json` (pre-ranked inflections) in three locations: `data/` in this project, the `DILEMMA_DATA_DIR`, or the [`ciscoriordan/dilemma-data`](https://huggingface.co/datasets/ciscoriordan/dilemma-data) HuggingFace dataset (requires `pip install huggingface_hub`).
 
 #### Lemma Equivalences
