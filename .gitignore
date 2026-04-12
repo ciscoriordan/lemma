@@ -28,10 +28,6 @@ processed_entries_*.json
 *.bak
 *~
 
-# Python cache
-__pycache__/
-*.pyc
-
 # Claude Code local settings and agent worktrees
 .claude/settings.local.json
 .claude/worktrees/

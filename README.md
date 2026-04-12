@@ -4,7 +4,7 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
 </p>
 
-A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, ~7,000x faster kindlegen replacement). The generator itself is written in Rust for fast builds of the full dictionary.
+A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, ~7,000x faster kindlegen replacement). The generator and all helper tools are written in Rust for fast builds of the full dictionary.
 
 | [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
 |:---|:---|
@@ -145,10 +145,10 @@ The generator also automatically looks for `mg_ranked_forms.json` (pre-ranked in
 
 #### Lemma Equivalences
 
-Wiktionary and Dilemma sometimes disagree on the canonical lemma for a word (e.g., Wiktionary uses `τρώω` for "eat" while Dilemma files all 165 inflections under `τρώγω`). To bridge this, run the (still Python) helper script:
+Wiktionary and Dilemma sometimes disagree on the canonical lemma for a word (e.g., Wiktionary uses `τρώω` for "eat" while Dilemma files all 165 inflections under `τρώγω`). To bridge this, run:
 
 ```bash
-python3 generate_mg_equivalences.py
+cargo run --release --bin generate_mg_equivalences
 ```
 
 This cross-references the two data sources, uses corpus frequency as a tiebreaker, and writes `data/mg_lemma_equivalences.json`. The dictionary generator loads this automatically. Without it, inflections filed under a different canonical form in Dilemma will be missed.

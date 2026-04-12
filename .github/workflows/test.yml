@@ -19,10 +19,6 @@ jobs:
           repository: ciscoriordan/kindling
           path: kindling
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -34,10 +30,14 @@ jobs:
         working-directory: lemma
         run: cargo build --release
 
+      - name: Run unit tests
+        working-directory: lemma
+        run: cargo test --release
+
       - name: Build basic dictionary
         working-directory: lemma
         run: ./target/release/lemma
 
-      - name: Run tests
+      - name: Run integration tests against built dictionary
         working-directory: lemma
-        run: python3 test_dictionary_lookup.py 'lemma_greek_en_*_basic'
+        run: ./target/release/test_dictionary_lookup lemma_greek_en_*_basic
