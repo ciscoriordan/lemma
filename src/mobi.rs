@@ -40,6 +40,7 @@ impl<'a> MobiGenerator<'a> {
             None,  // doc_type
             true,  // kindle_limits (default ON for dictionaries)
             false, // self_check
+            false, // kindlegen_parity (comic-path only; ignored for dict builds)
         );
 
         match result {
