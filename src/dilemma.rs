@@ -74,8 +74,28 @@ impl DilemmaInflections {
     }
 
     pub fn get_inflections(&self, lemma: &str) -> Vec<String> {
-        let mut forms: Vec<String> = self.lemma_to_forms.get(lemma).cloned().unwrap_or_default();
+        let mut forms = self.collect_direct_inflections(lemma);
+        if forms.is_empty() {
+            if let Some(dl) = self.form_to_lemma.get(lemma) {
+                if let Some(dl_forms) = self.lemma_to_forms.get(dl) {
+                    forms = dl_forms.clone();
+                }
+            }
+        }
+        dedup_preserve_order(forms)
+    }
 
+    // Same as get_inflections but omits the form_to_lemma redirect fallback.
+    // That fallback grafts a parent lemma's full paradigm onto any headword
+    // dilemma treats as "a form of" something else, which poisons variant
+    // spellings that have their own Kaikki paradigm (e.g. αλάκερος getting
+    // ολόκληρος's forms, so ολόκληρες routes to αλάκερος on popup lookup).
+    pub fn get_direct_inflections(&self, lemma: &str) -> Vec<String> {
+        dedup_preserve_order(self.collect_direct_inflections(lemma))
+    }
+
+    fn collect_direct_inflections(&self, lemma: &str) -> Vec<String> {
+        let mut forms: Vec<String> = self.lemma_to_forms.get(lemma).cloned().unwrap_or_default();
         let equivs = self.equivalent_lemmas(lemma);
         for eq in &equivs {
             if eq != lemma {
@@ -87,23 +107,7 @@ impl DilemmaInflections {
                 }
             }
         }
-
-        if forms.is_empty() {
-            if let Some(dl) = self.form_to_lemma.get(lemma) {
-                if let Some(dl_forms) = self.lemma_to_forms.get(dl) {
-                    forms = dl_forms.clone();
-                }
-            }
-        }
-
-        let mut seen = HashSet::new();
-        let mut deduped = Vec::new();
-        for f in forms {
-            if seen.insert(f.clone()) {
-                deduped.push(f);
-            }
-        }
-        deduped
+        forms
     }
 
     pub fn get_all_lemmas(&self, word: &str) -> Vec<String> {
@@ -291,6 +295,17 @@ impl DilemmaInflections {
         }
         println!("Built inflection table for {} lemmas", self.lemma_to_forms.len());
     }
+}
+
+fn dedup_preserve_order(forms: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut deduped = Vec::new();
+    for f in forms {
+        if seen.insert(f.clone()) {
+            deduped.push(f);
+        }
+    }
+    deduped
 }
 
 pub fn find_data_dir() -> Option<PathBuf> {

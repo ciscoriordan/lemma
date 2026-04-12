@@ -316,6 +316,9 @@ impl<'a> HtmlGenerator<'a> {
         let mut contested = 0;
         for (iform, headwords) in &all_claims {
             if headwords.len() <= 1 { continue; }
+
+            // First preference: if one contestant is a variant of another
+            // per dilemma's equivalences map, the canonical wins.
             let mut winner: Option<String> = None;
             for hw in headwords {
                 if let Some(canonical) = equiv_canonical.get(hw) {
@@ -325,6 +328,26 @@ impl<'a> HtmlGenerator<'a> {
                     }
                 }
             }
+
+            // Otherwise pick the highest-frequency headword. Alphabetical
+            // stable tiebreak keeps output deterministic when frequencies
+            // match (including the all-zero case).
+            if winner.is_none() {
+                let mut best: Option<(&String, i64)> = None;
+                for hw in headwords {
+                    let f = self.frequency.frequency(hw);
+                    match &best {
+                        None => best = Some((hw, f)),
+                        Some((bw, bf)) => {
+                            if f > *bf || (f == *bf && hw < *bw) {
+                                best = Some((hw, f));
+                            }
+                        }
+                    }
+                }
+                winner = best.map(|(w, _)| w.clone());
+            }
+
             let Some(winner) = winner else { continue; };
             contested += 1;
             for hw in headwords {
@@ -333,7 +356,7 @@ impl<'a> HtmlGenerator<'a> {
                 }
             }
         }
-        println!("  Deduplicated {} contested iforms by frequency", contested);
+        println!("  Deduplicated {} contested iforms (canonical form + highest-frequency tiebreak)", contested);
         self.iform_owner = iform_owner;
     }
 

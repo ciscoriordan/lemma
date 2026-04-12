@@ -758,6 +758,12 @@ impl<'a> EntryProcessor<'a> {
         let dilemma_ptr: Option<*const DilemmaInflections> =
             self.dilemma.as_deref().map(|d| d as *const DilemmaInflections);
 
+        let filter_valid = |forms: Vec<String>| -> Vec<String> {
+            forms.into_iter()
+                .filter(|f| !f.contains(' ') && greek_re().is_match(f))
+                .collect()
+        };
+
         for (word, list) in self.entries.iter_mut() {
             for entry in list.iter_mut() {
                 if !entry.form_of_targets.is_empty() {
@@ -766,17 +772,30 @@ impl<'a> EntryProcessor<'a> {
                 }
                 if has_dilemma {
                     let dilemma = unsafe { &*dilemma_ptr.unwrap() };
-                    let forms = dilemma.get_inflections(&word);
-                    if !forms.is_empty() {
-                        let valid: Vec<String> = forms
-                            .into_iter()
-                            .filter(|f| !f.contains(' ') && greek_re().is_match(f))
-                            .collect();
-                        if !valid.is_empty() {
-                            dilemma_count += valid.len();
-                            entry.inflections = valid;
-                            continue;
-                        }
+
+                    // Tier 1: dilemma direct paradigm (no form_to_lemma redirect).
+                    let direct = filter_valid(dilemma.get_direct_inflections(&word));
+                    if !direct.is_empty() {
+                        dilemma_count += direct.len();
+                        entry.inflections = direct;
+                        continue;
+                    }
+
+                    // Tier 2: Kaikki already gave this entry its own paradigm.
+                    // Trust it instead of letting dilemma's form_to_lemma
+                    // fallback graft an unrelated parent lemma's forms.
+                    if !entry.inflections.is_empty() {
+                        wiktionary_fallback_count += entry.inflections.len();
+                        continue;
+                    }
+
+                    // Tier 3: neither dilemma direct nor Kaikki had anything;
+                    // last resort is dilemma's form_to_lemma redirect.
+                    let redirected = filter_valid(dilemma.get_inflections(&word));
+                    if !redirected.is_empty() {
+                        dilemma_count += redirected.len();
+                        entry.inflections = redirected;
+                        continue;
                     }
                 }
                 wiktionary_fallback_count += entry.inflections.len();
