@@ -7,6 +7,7 @@ use crate::epub::EpubGenerator;
 use crate::front_matter::{self, FrontMatter};
 use crate::html_gen::{BuildParams, HtmlGenerator};
 use crate::mobi::MobiGenerator;
+use crate::version::LEMMA_VERSION;
 use chrono::Local;
 use std::path::PathBuf;
 
@@ -30,14 +31,17 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     let enable_polytonic = opts.enable_polytonic || is_full_build;
     let build_tag = if !is_full_build { "_basic".to_string() } else { String::new() };
 
-    let download_date = Local::now().format("%Y%m%d").to_string();
+    // Today's date is used for the human-readable "Dictionary created" line
+    // on the copyright page, NOT for any filename.
+    let build_date = Local::now().format("%Y%m%d").to_string();
 
     let front_matter: FrontMatter = front_matter::load_front_matter(opts.front_matter_path.as_deref())?;
 
     let source_desc = if opts.source_lang == "en" { "English" } else { "Greek" };
+    println!("Lemma v{} - Greek Kindle Dictionary Generator", LEMMA_VERSION);
     println!("Initialized with:");
     println!("  Source: {} Wiktionary", source_desc);
-    println!("  Download date: {}", download_date);
+    println!("  Build date: {}", build_date);
     if let Some(p) = opts.limit_percent {
         println!("  Word limit: {}% of entries", p);
     }
@@ -56,18 +60,14 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
         });
     println!("  Edition: {}", edition_preview);
 
-    println!("Lemma - Greek Kindle Dictionary Generator");
-    println!("Download date: {}", download_date);
-
     // Download
-    let mut downloader = Downloader::new(&opts.source_lang, &download_date);
-    let (success, filename, actual_date) = downloader.download();
+    let mut downloader = Downloader::new(&opts.source_lang);
+    let (success, filename) = downloader.download();
     if !success {
         eprintln!("Error: Download failed");
         std::process::exit(1);
     }
     let filename = filename.expect("filename set on success");
-    let download_date = if actual_date != download_date { actual_date } else { download_date };
     let extraction_date = downloader.extraction_date;
 
     // Load dilemma data
@@ -88,7 +88,7 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     // HTML generation
     let params = BuildParams {
         source_lang: opts.source_lang.clone(),
-        download_date: download_date.clone(),
+        build_date: build_date.clone(),
         extraction_date: final_extraction_date.clone(),
         limit_percent: opts.limit_percent,
         max_inflections: opts.max_inflections,
@@ -109,7 +109,6 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     let epub = EpubGenerator {
         output_dir: &output_dir,
         source_lang: &opts.source_lang,
-        download_date: &download_date,
         opf_filename: &opf_filename,
     };
     epub.generate()?;
@@ -119,7 +118,6 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
         let mobi = MobiGenerator {
             output_dir: &output_dir,
             source_lang: &opts.source_lang,
-            download_date: &download_date,
             opf_filename: &opf_filename,
         };
         mobi.generate();

@@ -10,3 +10,4 @@ pub mod html_escape;
 pub mod html_gen;
 pub mod mobi;
 pub mod mobi_validator;
+pub mod version;

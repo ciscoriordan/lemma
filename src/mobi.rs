@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 pub struct MobiGenerator<'a> {
     pub output_dir: &'a Path,
     pub source_lang: &'a str,
-    pub download_date: &'a str,
     pub opf_filename: &'a str,
 }
 

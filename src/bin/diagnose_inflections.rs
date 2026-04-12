@@ -34,16 +34,20 @@ fn main() -> ExitCode {
         args
     };
 
-    // Find all content.html files from latest builds (el wiktionary source).
+    // Find all content.html files from el-source builds. Match both the
+    // bare `lemma_greek_el` directory and any `lemma_greek_el_*` variant
+    // (e.g. `_basic`), excluding test-percentage builds.
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let pct_re = Regex::new(r"_\d+(\.\d+)?pct$").unwrap();
     let mut files: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = fs::read_dir(&cwd) {
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().into_owned();
-            if !name.starts_with("lemma_greek_el_") {
+            let is_el_build = name == "lemma_greek_el" || name.starts_with("lemma_greek_el_");
+            if !is_el_build {
                 continue;
             }
-            if name.contains("pct") {
+            if pct_re.is_match(&name) {
                 continue;
             }
             let p = e.path().join("content.html");

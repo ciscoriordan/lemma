@@ -41,8 +41,10 @@ Ready-to-use dictionary files are available on the [Releases page](https://githu
 
 ### Greek-English Dictionary
 
-- `lemma_greek_en_[date]_basic.mobi` - Basic edition: definitions and inflections
-- `lemma_greek_en_[date].mobi` - Pro edition: adds gender/variant info, etymology, cross-reference links, and polytonic lookup support
+- `lemma_greek_en_basic.mobi` - Basic edition: definitions and inflections
+- `lemma_greek_en.mobi` - Pro edition: adds gender/variant info, etymology, cross-reference links, and polytonic lookup support
+
+Filenames are stable across versions, so each new release replaces the previous file in `documents/dictionaries/` on your Kindle in place. Look at the **Build Info** section on the dictionary's copyright page to see which build you have installed (lemma generator version, build date, and Wiktionary extraction date).
 
 ## Features
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.74M form-to-lemma mappings from [Dilemma](https://github.com/ciscoriordan/dilemma) when available
@@ -137,9 +139,9 @@ The downloader records the real Kaikki extraction date (the date Wiktionary was 
 1. HTTP `Last-Modified` header on the Kaikki JSONL URL (direct download).
 2. The "extracted on YYYY-MM-DD" line on Kaikki's language index page (direct download, fallback).
 3. The file mtime of the local dump (when `KAIKKI_LOCAL_DIR` is used).
-4. The date embedded in the pre-downloaded fallback filename.
+4. The hardcoded constant for any committed fallback snapshot.
 
-On a successful download the downloader writes a tiny `greek_data_<lang>_<date>.jsonl.meta` sidecar next to the dump containing `{"extraction_date": ..., "source_url": ..., "downloaded_at": ...}`. Subsequent builds that reuse the cached dump read the sidecar so the extraction date survives across runs. Sidecars are gitignored.
+On a successful download the downloader writes a tiny `greek_data_<lang>.jsonl.meta` sidecar next to the dump containing `{"extraction_date": ..., "source_url": ..., "downloaded_at": ...}`. Subsequent builds that reuse the cached dump read the sidecar so the extraction date survives across runs. Sidecars are gitignored.
 
 The generator also automatically looks for `mg_ranked_forms.json` (pre-ranked inflections) in three locations: `data/` in this project, the `DILEMMA_DATA_DIR`, or the [`ciscoriordan/dilemma-data`](https://huggingface.co/datasets/ciscoriordan/dilemma-data) HuggingFace dataset (requires `pip install huggingface_hub`).
 

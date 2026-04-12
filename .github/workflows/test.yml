@@ -40,4 +40,4 @@ jobs:
 
       - name: Run integration tests against built dictionary
         working-directory: lemma
-        run: ./target/release/test_dictionary_lookup lemma_greek_en_*_basic
+        run: ./target/release/test_dictionary_lookup lemma_greek_en_basic

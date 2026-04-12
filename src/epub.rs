@@ -9,7 +9,6 @@ use zip::{CompressionMethod, ZipWriter};
 pub struct EpubGenerator<'a> {
     pub output_dir: &'a Path,
     pub source_lang: &'a str,
-    pub download_date: &'a str,
     pub opf_filename: &'a str,
 }
 
@@ -17,7 +16,9 @@ impl<'a> EpubGenerator<'a> {
     pub fn generate(&self) -> std::io::Result<PathBuf> {
         println!("\nGenerating EPUB file...");
 
-        let epub_name = format!("lemma_greek_{}_{}.epub", self.source_lang, self.download_date);
+        // Derive the EPUB filename from the OPF filename so the edition tag
+        // (`_basic` or empty) flows through automatically.
+        let epub_name = self.opf_filename.replace(".opf", ".epub");
         let epub_path = self.output_dir.join(&epub_name);
 
         let file = File::create(&epub_path)?;

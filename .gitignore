@@ -3,10 +3,9 @@
 # Generated dictionary directories
 lemma_greek_*/
 
-# Downloaded data files (except the specific fallback files we're tracking)
+# Downloaded data files. Lemma redownloads from Kaikki on each run, so we
+# never need to track the dump in git. There is no committed fallback file.
 *.jsonl
-!greek_data_en_20250716.jsonl
-!greek_data_el_20250717.jsonl
 
 # Sidecar metadata written next to downloaded Kaikki dumps
 *.jsonl.meta

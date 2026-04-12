@@ -106,7 +106,9 @@ const DIPHTHONG_SECONDS: &str = "ιυίύΙΥΊΎ";
 
 pub struct BuildParams {
     pub source_lang: String,
-    pub download_date: String,
+    /// Today's date as YYYYMMDD - displayed on the copyright page as the
+    /// "Dictionary created" line. NOT used in any filename.
+    pub build_date: String,
     pub extraction_date: Option<String>,
     pub limit_percent: Option<f64>,
     pub max_inflections: Option<usize>,
@@ -140,7 +142,10 @@ impl<'a> HtmlGenerator<'a> {
         }
         let freq = FrequencyRanker::new();
 
-        let mut output_dir = format!("lemma_greek_{}_{}{}", params.source_lang, params.download_date, params.build_tag);
+        // Build directory name has no date and no version - lemma's stable
+        // naming convention. The limit-percent suffix stays because it
+        // identifies a test build vs. the real one.
+        let mut output_dir = format!("lemma_greek_{}{}", params.source_lang, params.build_tag);
         if let Some(p) = params.limit_percent {
             output_dir = format!("{}_{}pct", output_dir, p);
         }
@@ -744,7 +749,7 @@ impl<'a> HtmlGenerator<'a> {
         let tools = fm.get("tools").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
         let data_sources = fm.get("data_sources").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
 
-        let created_fmt = format_created_date(&self.params.download_date);
+        let created_fmt = format_created_date(&self.params.build_date);
         let extraction_fmt = format_extraction_date(self.params.extraction_date.as_deref());
 
         let mut lines: Vec<String> = Vec::new();
@@ -788,6 +793,10 @@ impl<'a> HtmlGenerator<'a> {
         lines.push("    <h2>Build Info</h2>".to_string());
         lines.push(format!("    Wiktionary data extracted: {}<br />", escape_html(&extraction_fmt)));
         lines.push(format!("    Dictionary created: {}<br />", escape_html(&created_fmt)));
+        lines.push(format!(
+            "    Generator: lemma v{}<br />",
+            escape_html(crate::version::LEMMA_VERSION)
+        ));
 
         let body = lines.join("\n");
         let content = format!(
@@ -842,7 +851,15 @@ impl<'a> HtmlGenerator<'a> {
     fn create_opf_file(&mut self) -> std::io::Result<()> {
         let source_name = if self.params.source_lang == "en" { "en-el" } else { "el-el" };
         let edition_tag = if !self.params.is_full_build() { "Basic" } else { "" };
-        let unique_id = format!("LemmaGreek{}{}", edition_tag, source_name.to_uppercase().replace('-', ""));
+        // Stable per-edition unique identifier. NO date suffix - that's the
+        // whole point: every new build of the same edition has the same UUID
+        // so Kindle treats new versions as in-place upgrades, not as fresh
+        // dictionaries piling up alongside the old ones.
+        let unique_id = format!(
+            "LemmaGreek{}{}",
+            edition_tag,
+            source_name.to_uppercase().replace('-', "")
+        );
         let display_title = self.params.front_matter
             .get("edition_name")
             .and_then(|v| v.as_str())
@@ -850,8 +867,8 @@ impl<'a> HtmlGenerator<'a> {
             .unwrap_or_else(|| self.default_edition_name());
         let out_lang = if self.params.source_lang == "en" { "en" } else { "el" };
         let opf_filename = format!(
-            "lemma_greek_{}_{}{}.opf",
-            self.params.source_lang, self.params.download_date, self.params.build_tag
+            "lemma_greek_{}{}.opf",
+            self.params.source_lang, self.params.build_tag
         );
 
         let extraction = self.params.extraction_date.clone().unwrap_or_else(|| "Unknown".to_string());
@@ -865,10 +882,12 @@ r#"<?xml version="1.0"?>
     <dc:language>el</dc:language>
     <dc:publisher>Lemma</dc:publisher>
     <dc:rights>Creative Commons Attribution-ShareAlike 4.0 International</dc:rights>
-    <dc:date>{date}</dc:date>
-    <dc:identifier id="BookId" opf:scheme="UUID">{uid}-{date}</dc:identifier>
+    <dc:date>{build_date}</dc:date>
+    <dc:identifier id="BookId" opf:scheme="UUID">{uid}</dc:identifier>
     <meta name="wiktionary-extraction-date" content="{extraction}" />
     <meta name="dictionary-name" content="{title}" />
+    <meta name="generator" content="lemma" />
+    <meta name="generator-version" content="{version}" />
     <x-metadata>
       <DictionaryInLanguage>el</DictionaryInLanguage>
       <DictionaryOutLanguage>{outlang}</DictionaryOutLanguage>
@@ -904,10 +923,11 @@ r#"<?xml version="1.0"?>
 </package>
 "#,
             title = display_title,
-            date = self.params.download_date,
+            build_date = self.params.build_date,
             uid = unique_id,
             extraction = extraction,
             outlang = out_lang,
+            version = crate::version::LEMMA_VERSION,
         );
 
         let opf_path = self.output_dir.join(&opf_filename);
@@ -932,7 +952,7 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
-    <meta name="dtb:uid" content="{uid}-{date}"/>
+    <meta name="dtb:uid" content="{uid}"/>
     <meta name="dtb:depth" content="1"/>
     <meta name="dtb:totalPageCount" content="0"/>
     <meta name="dtb:maxPageNumber" content="0"/>
@@ -961,7 +981,6 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
 </ncx>
 "#,
             uid = unique_id,
-            date = self.params.download_date,
             title = display_title,
         );
         let mut f = File::create(self.output_dir.join("toc.ncx"))?;

@@ -298,6 +298,10 @@ fn take_chars(s: &str, n: usize) -> String {
 }
 
 // ----------------- Build dir discovery -----------------
+//
+// Lemma builds always go to the same stable directory name per edition
+// (e.g. `lemma_greek_en_basic/`), so there is no date to group by. We just
+// take the matching dirs and let the test loop iterate over them.
 
 fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -313,7 +317,7 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
             return vec![direct];
         }
         // Otherwise treat the pattern as a name fragment to match against
-        // lemma_greek_*/ directories.
+        // any directory in the cwd that contains a content.html.
         let mut out = Vec::new();
         if let Ok(entries) = fs::read_dir(&cwd) {
             for e in entries.flatten() {
@@ -328,8 +332,10 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
         return out;
     }
 
-    // Find latest builds - try both English and Greek Wiktionary sources.
-    let date_re = Regex::new(r"lemma_greek_\w+_(\d{8})").unwrap();
+    // No pattern: take every lemma_greek_* dir that has a content.html, but
+    // skip percentage test builds (`_10pct`, `_1.0pct`, etc.) so the default
+    // run only tests the real builds.
+    let pct_re = Regex::new(r"_\d+(\.\d+)?pct$").unwrap();
 
     let mut all_dirs: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = fs::read_dir(&cwd) {
@@ -338,7 +344,7 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
             if !name.starts_with("lemma_greek_") {
                 continue;
             }
-            if name.contains("pct") {
+            if pct_re.is_match(&name) {
                 continue;
             }
             let p = e.path();
@@ -348,35 +354,7 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
         }
     }
     all_dirs.sort();
-    if all_dirs.is_empty() {
-        return all_dirs;
-    }
-
-    // Group by date and find the latest date.
-    let mut latest_date: Option<String> = None;
-    for d in &all_dirs {
-        let name = d.file_name().unwrap().to_string_lossy();
-        if let Some(c) = date_re.captures(&name) {
-            let date = c[1].to_string();
-            if latest_date.as_ref().map(|l| &date > l).unwrap_or(true) {
-                latest_date = Some(date);
-            }
-        }
-    }
-
-    if let Some(latest) = latest_date {
-        return all_dirs
-            .into_iter()
-            .filter(|d| {
-                d.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .contains(&latest)
-            })
-            .collect();
-    }
-
-    all_dirs.into_iter().rev().take(1).collect()
+    all_dirs
 }
 
 // ----------------- Tests -----------------

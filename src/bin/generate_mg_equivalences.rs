@@ -245,29 +245,35 @@ struct WiktData {
 }
 
 fn load_wikt_data() -> Option<WiktData> {
-    // Find the latest greek_data_el_*.jsonl file in the script's directory
-    // (the project root, by convention).
-    let entries: Vec<PathBuf> = match fs::read_dir(".") {
-        Ok(it) => it
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| {
-                p.file_name()
-                    .map(|n| {
-                        let n = n.to_string_lossy();
-                        n.starts_with("greek_data_el_") && n.ends_with(".jsonl")
-                    })
-                    .unwrap_or(false)
-            })
-            .collect(),
-        Err(_) => Vec::new(),
+    // Look for the Greek-source Wiktionary dump in the project root. Prefer
+    // the canonical undated filename `greek_data_el.jsonl`; if it isn't
+    // there, fall through to any legacy `greek_data_el_*.jsonl` (older
+    // dated dumps from before the no-dates rule).
+    let canonical = PathBuf::from("greek_data_el.jsonl");
+    let latest: PathBuf = if canonical.exists() {
+        canonical
+    } else {
+        let mut legacy: Vec<PathBuf> = match fs::read_dir(".") {
+            Ok(it) => it
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.file_name()
+                        .map(|n| {
+                            let n = n.to_string_lossy();
+                            n.starts_with("greek_data_el_") && n.ends_with(".jsonl")
+                        })
+                        .unwrap_or(false)
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        if legacy.is_empty() {
+            eprintln!("Error: no greek_data_el.jsonl (or legacy greek_data_el_*.jsonl) file found");
+            return None;
+        }
+        legacy.sort();
+        legacy.pop().unwrap()
     };
-    if entries.is_empty() {
-        eprintln!("Error: no greek_data_el_*.jsonl file found");
-        return None;
-    }
-    let mut sorted = entries;
-    sorted.sort();
-    let latest = sorted.last().unwrap();
 
     println!(
         "Loading Wiktionary data from {}...",
