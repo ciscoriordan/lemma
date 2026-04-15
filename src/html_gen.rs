@@ -513,24 +513,24 @@ impl<'a> HtmlGenerator<'a> {
                 if let Some(head_info) = self.get_head_info_for_pos(pos_entries.as_slice(), word) {
                     pos_display = format!("{}, {}", pos_display, head_info);
                 }
-                write!(out, "  <p><i>{}</i></p>\n", escape_html(&pos_display))?;
+                write!(out, "  <div><i>{}</i></div>\n", escape_html(&pos_display))?;
 
                 let to_print = all_definitions.iter().take(5).collect::<Vec<_>>();
                 for (def_idx, definition) in to_print.iter().enumerate() {
                     let clean = strip_def_qualifiers(definition);
                     if all_definitions.len() > 1 {
-                        write!(out, "  <p class='def'>{}. {}</p>\n", def_idx + 1, self.linkify_definition(&clean))?;
+                        write!(out, "  <div class='def'>{}. {}</div>\n", def_idx + 1, self.linkify_definition(&clean))?;
                     } else {
-                        write!(out, "  <p class='def'>{}</p>\n", self.linkify_definition(&clean))?;
+                        write!(out, "  <div class='def'>{}</div>\n", self.linkify_definition(&clean))?;
                     }
                     if let Some(ex) = all_examples.get(def_idx).and_then(|e| e.as_ref()) {
                         if !ex.text.is_empty() {
                             let ex_text = format_example_text(ex);
                             let ex_trans = escape_html(&ex.translation);
                             if !ex_trans.is_empty() {
-                                write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
+                                write!(out, "  <div class='ex'>{} - {}</div>\n", ex_text, ex_trans)?;
                             } else {
-                                write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
+                                write!(out, "  <div class='ex'>{}</div>\n", ex_text)?;
                             }
                         }
                     }
@@ -559,20 +559,20 @@ impl<'a> HtmlGenerator<'a> {
                 if let Some(head_info) = self.get_head_info_for_pos(&[entry], word) {
                     pos_display = format!("{}, {}", pos_display, head_info);
                 }
-                write!(out, "  <p><i>{}</i></p>\n", escape_html(&pos_display))?;
+                write!(out, "  <div><i>{}</i></div>\n", escape_html(&pos_display))?;
 
                 if defs.len() > 1 {
                     for (def_idx, definition) in defs.iter().enumerate() {
                         let clean = strip_def_qualifiers(definition);
-                        write!(out, "  <p class='def'>{}. {}</p>\n", def_idx + 1, self.linkify_definition(&clean))?;
+                        write!(out, "  <div class='def'>{}. {}</div>\n", def_idx + 1, self.linkify_definition(&clean))?;
                         if let Some(ex) = entry_examples.get(def_idx).and_then(|e| e.as_ref()) {
                             if !ex.text.is_empty() {
                                 let ex_text = format_example_text(ex);
                                 let ex_trans = escape_html(&ex.translation);
                                 if !ex_trans.is_empty() {
-                                    write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
+                                    write!(out, "  <div class='ex'>{} - {}</div>\n", ex_text, ex_trans)?;
                                 } else {
-                                    write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
+                                    write!(out, "  <div class='ex'>{}</div>\n", ex_text)?;
                                 }
                             }
                         }
@@ -580,15 +580,15 @@ impl<'a> HtmlGenerator<'a> {
                 } else {
                     for (def_idx, definition) in defs.iter().enumerate() {
                         let clean = strip_def_qualifiers(definition);
-                        write!(out, "  <p class='def'>{}</p>\n", self.linkify_definition(&clean))?;
+                        write!(out, "  <div class='def'>{}</div>\n", self.linkify_definition(&clean))?;
                         if let Some(ex) = entry_examples.get(def_idx).and_then(|e| e.as_ref()) {
                             if !ex.text.is_empty() {
                                 let ex_text = format_example_text(ex);
                                 let ex_trans = escape_html(&ex.translation);
                                 if !ex_trans.is_empty() {
-                                    write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
+                                    write!(out, "  <div class='ex'>{} - {}</div>\n", ex_text, ex_trans)?;
                                 } else {
-                                    write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
+                                    write!(out, "  <div class='ex'>{}</div>\n", ex_text)?;
                                 }
                             }
                         }
@@ -601,7 +601,7 @@ impl<'a> HtmlGenerator<'a> {
                         let stripped = strip_transliterations(trimmed);
                         let cleaned = clean_etymology(&stripped);
                         if !cleaned.is_empty() {
-                            write!(out, "  <p class='etym'>Etymology: {}</p>\n", escape_html(&cleaned))?;
+                            write!(out, "  <div class='etym'>Etymology: {}</div>\n", escape_html(&cleaned))?;
                         }
                     }
                 }
@@ -1068,7 +1068,7 @@ fn html_header(title: &str) -> String {
     // type="text/css" stay in because they are harmless in HTML mode and
     // help any downstream tooling that happens to parse strictly.
     format!(
-        "<html xmlns:math=\"http://exslt.org/math\" xmlns:svg=\"http://www.w3.org/2000/svg\"\n      xmlns:tl=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:saxon=\"http://saxon.sf.net/\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"\n      xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n      xmlns:cx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n      xmlns:mbp=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:mmc=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:idx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\">\n  <head>\n    <title>{}</title>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n    <style type=\"text/css\">\n      h5 {{ font-size: 1em; margin: 0; }}\n      p {{ margin: 0.2em 0; }}\n      b {{ font-weight: bold; }}\n      i {{ font-style: italic; }}\n      .pos {{ font-style: italic; }}\n      .def {{ margin-left: 20px; }}\n      .ex {{ margin-left: 20px; }}\n      .etym {{ margin-top: 0.5em; margin-left: 0; background-color: #f0f0f0; padding: 0.2em 0.4em; }}\n      hr {{ margin: 5px 0; border: none; border-top: 1px solid #ccc; }}\n    </style>\n  </head>\n  <body>\n    <mbp:frameset>\n",
+        "<html xmlns:math=\"http://exslt.org/math\" xmlns:svg=\"http://www.w3.org/2000/svg\"\n      xmlns:tl=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:saxon=\"http://saxon.sf.net/\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"\n      xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n      xmlns:cx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n      xmlns:mbp=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:mmc=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:idx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\">\n  <head>\n    <title>{}</title>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n    <style type=\"text/css\">\n      h5 {{ font-size: 1em; margin: 0; }}\n      div {{ margin: 0.2em 0; }}\n      b {{ font-weight: bold; }}\n      i {{ font-style: italic; }}\n      .pos {{ font-style: italic; }}\n      .def {{ margin-left: 20px; }}\n      .ex {{ margin-left: 20px; }}\n      .etym {{ margin-top: 0.5em; margin-left: 0; background-color: #f0f0f0; padding: 0.2em 0.4em; }}\n      hr {{ margin: 5px 0; border: none; border-top: 1px solid #ccc; }}\n    </style>\n  </head>\n  <body>\n    <mbp:frameset>\n",
         escape_html(title)
     )
 }

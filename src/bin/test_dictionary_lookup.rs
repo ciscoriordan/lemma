@@ -217,8 +217,8 @@ impl DictionaryIndex {
         let entry_re = Regex::new(r"(?s)<idx:entry[^>]*>(.+?)</idx:entry>").unwrap();
         let orth_re = Regex::new(r#"<idx:orth\s+value="([^"]*)""#).unwrap();
         let iform_re = Regex::new(r#"<idx:iform\s+value="([^"]*)""#).unwrap();
-        let def_re = Regex::new(r"(?s)<p class='def'>(.*?)</p>").unwrap();
-        let pos_re = Regex::new(r"(?s)<p><i>(.*?)</i></p>").unwrap();
+        let def_re = Regex::new(r"(?s)<div class='def'>(.*?)</div>").unwrap();
+        let pos_re = Regex::new(r"(?s)<div><i>(.*?)</i></div>").unwrap();
 
         for cap in entry_re.captures_iter(&content) {
             let entry_html = &cap[1];

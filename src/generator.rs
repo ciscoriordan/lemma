@@ -72,8 +72,8 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     let entries = std::mem::replace(&mut processor.entries, crate::entry_processor::EntryMap::new());
     drop(processor);
 
-    // HTML generation. Lemma now builds a single unified edition with all
-    // features enabled - no more Basic/Pro split.
+    // HTML generation. Lemma builds a single unified edition with all
+    // features always enabled.
     let params = BuildParams {
         source_lang: opts.source_lang.clone(),
         build_date: build_date.clone(),

@@ -7,7 +7,7 @@
 A free Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (a reverse-engineered, ~7,000x faster *kindlegen* replacement). The generator and all helper tools are written in Rust.
 
 <p align="center">
-  <img width="600" alt="Lemma dictionary screenshot" src="images/screenshot_pro.jpg">
+  <img width="600" alt="Lemma dictionary screenshot" src="images/screenshot.jpg">
 </p>
 
 Lemma ships as a single unified edition with every feature the generator supports - definitions, inflections, monotonic and polytonic lookup, gender and declension info, etymology, usage examples, and clickable cross-references.
@@ -107,7 +107,7 @@ cargo run --release -- -l 10
 - `--front-matter PATH`: Override the copyright/usage front-matter fields (edition name, tagline, features, copyright holder, extra copyright lines, data sources) from a JSON file. Unspecified fields fall through to the built-in defaults.
 - `-h, --help`: Show help message
 
-Cross-references, etymology, usage examples, and polytonic lookups are enabled by default - previous builds called these "Pro" features, but lemma now ships a single unified edition with the full feature set.
+Cross-references, etymology, usage examples, and polytonic lookups are always enabled — lemma ships a single unified edition with the full feature set.
 
 ## Data Sources
 

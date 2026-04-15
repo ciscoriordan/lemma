@@ -7,8 +7,7 @@
 // Also handles PalmDB name uniqueness across distinct filename families,
 // where a "family" is a basename with its `_YYYYMMDD` date stamp stripped:
 //
-//     lemma_greek_en_20260410.mobi          -> lemma_greek_en.mobi
-//     lemma_greek_en_20260410_basic.mobi    -> lemma_greek_en_basic.mobi
+//     lemma_greek_en_20260410.mobi  -> lemma_greek_en.mobi
 //
 // Two files in the same family are expected to share a PalmDB name (kindling
 // derives it from the stable OPF title), so we dedupe to the newest file per
