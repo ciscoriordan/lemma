@@ -1,4 +1,4 @@
-# Lemma Modern Greek Dictionary for Kindle
+# Lemma: Modern Greek Dictionary for Kindle
 
 <p align="center">
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
