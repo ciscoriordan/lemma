@@ -112,15 +112,7 @@ pub struct BuildParams {
     pub extraction_date: Option<String>,
     pub limit_percent: Option<f64>,
     pub max_inflections: Option<usize>,
-    pub enable_links: bool,
-    pub enable_etymology: bool,
-    pub enable_polytonic: bool,
     pub front_matter: Value,
-    pub build_tag: String, // "_basic" or ""
-}
-
-impl BuildParams {
-    pub fn is_full_build(&self) -> bool { self.enable_links || self.enable_etymology }
 }
 
 pub struct HtmlGenerator<'a> {
@@ -132,6 +124,10 @@ pub struct HtmlGenerator<'a> {
     use_ranked_forms: bool,
     iform_owner: HashMap<String, String>,
     pub opf_filename: String,
+    // Populated by create_content_html before any entry is rendered, so
+    // linkify_definition can emit file-qualified cross-reference hrefs.
+    headword_buckets: HashMap<String, u8>,
+    buckets_used: Vec<u8>,
 }
 
 impl<'a> HtmlGenerator<'a> {
@@ -145,7 +141,7 @@ impl<'a> HtmlGenerator<'a> {
         // Build directory name has no date and no version - lemma's stable
         // naming convention. The limit-percent suffix stays because it
         // identifies a test build vs. the real one.
-        let mut output_dir = format!("lemma_greek_{}{}", params.source_lang, params.build_tag);
+        let mut output_dir = format!("lemma_greek_{}", params.source_lang);
         if let Some(p) = params.limit_percent {
             output_dir = format!("{}_{}pct", output_dir, p);
         }
@@ -159,6 +155,8 @@ impl<'a> HtmlGenerator<'a> {
             use_ranked_forms,
             iform_owner: HashMap::new(),
             opf_filename: String::new(),
+            headword_buckets: HashMap::new(),
+            buckets_used: Vec::new(),
         }
     }
 
@@ -179,7 +177,7 @@ impl<'a> HtmlGenerator<'a> {
     }
 
     fn create_content_html(&mut self) -> std::io::Result<()> {
-        println!("Creating content.html...");
+        println!("Creating per-letter content files...");
 
         self.merge_form_of_into_parents();
         self.build_iform_owners();
@@ -188,38 +186,63 @@ impl<'a> HtmlGenerator<'a> {
         let mut sorted_keys: Vec<String> = self.entries.keys().cloned().collect();
         sorted_keys.sort_by_cached_key(|k| normalize_for_sorting(k));
 
-        let total = sorted_keys.len();
+        // Populate the bucket map before rendering so linkify_definition can
+        // emit cross-reference hrefs that point at the correct content file.
+        self.headword_buckets = sorted_keys
+            .iter()
+            .map(|k| (k.clone(), bucket_for_headword(k)))
+            .collect();
 
-        let content_path = self.output_dir.join("content.html");
-        let mut out = BufWriter::new(File::create(&content_path)?);
-        out.write_all(html_header().as_bytes())?;
-
-        // Render each entry in parallel to its own String buffer, then write
-        // the buffers in sorted order. This keeps output byte-identical while
-        // using rayon to parallelize the expensive per-entry work (ranking,
-        // polytonic expansion, linkify).
-        let rendered: Vec<Vec<u8>> = sorted_keys
+        // Render each entry in parallel, tagged with its bucket. Splitting the
+        // dictionary across multiple files keeps every file under KDP's
+        // server-side converter limit (KPG §15.5) and addresses §15.2's
+        // "each alphabet letter section should begin on a new page" as a
+        // side effect.
+        let rendered: Vec<(u8, Vec<u8>)> = sorted_keys
             .par_iter()
             .map(|word| {
                 let entries = self.entries.get(word).map(|v| v.as_slice()).unwrap_or(&[]);
                 let mut buf: Vec<u8> = Vec::with_capacity(512);
                 let _ = self.write_entry(&mut buf, word, entries);
-                buf
+                let bucket = self.headword_buckets.get(word).copied().unwrap_or(0);
+                (bucket, buf)
             })
             .collect();
 
-        let mut entry_count = 0usize;
-        for buf in &rendered {
-            out.write_all(buf)?;
-            entry_count += 1;
-            if entry_count % 10000 == 0 {
-                println!("  Processed {}/{} entries...", entry_count, total);
-            }
+        // Group by bucket while preserving the sort order within each bucket.
+        let mut per_bucket: HashMap<u8, Vec<Vec<u8>>> = HashMap::new();
+        for (bucket, buf) in rendered {
+            per_bucket.entry(bucket).or_default().push(buf);
         }
 
-        out.write_all(html_footer().as_bytes())?;
-        out.flush()?;
-        println!("  Created content.html with {} entries", entry_count);
+        let mut buckets_used: Vec<u8> = per_bucket.keys().copied().collect();
+        buckets_used.sort();
+        self.buckets_used = buckets_used.clone();
+
+        let mut total_entries = 0usize;
+        for bucket in buckets_used {
+            let bufs = &per_bucket[&bucket];
+            let path = self.output_dir.join(bucket_filename(bucket));
+            let mut out = BufWriter::new(File::create(&path)?);
+            out.write_all(html_header(bucket_label(bucket)).as_bytes())?;
+            for buf in bufs {
+                out.write_all(buf)?;
+            }
+            out.write_all(html_footer().as_bytes())?;
+            out.flush()?;
+            total_entries += bufs.len();
+            println!(
+                "  Wrote {} ({}: {} entries)",
+                bucket_filename(bucket),
+                bucket_label(bucket),
+                bufs.len()
+            );
+        }
+        println!(
+            "  Created {} content file(s) with {} entries total",
+            self.buckets_used.len(),
+            total_entries
+        );
         Ok(())
     }
 
@@ -400,8 +423,8 @@ impl<'a> HtmlGenerator<'a> {
             self.iform_owner.get(inf).map(|w| w.as_str() == word).unwrap_or(true)
         });
 
-        // Polytonic expansion
-        if self.params.enable_polytonic {
+        // Polytonic expansion (always enabled in the unified edition).
+        {
             let mut all_forms: Vec<String> = Vec::with_capacity(all_variations.len() + 1);
             all_forms.push(word.to_string());
             all_forms.extend(all_variations.iter().cloned());
@@ -432,18 +455,11 @@ impl<'a> HtmlGenerator<'a> {
         }
 
         let escaped_word = escape_html(word);
-        if self.params.enable_links {
-            let anchor = sanitize_anchor_id(&escaped_word);
-            write!(out,
-                "<idx:entry name=\"default\" scriptable=\"yes\" spell=\"yes\" id=\"hw_{}\">\n  <idx:short>\n    <idx:orth value=\"{}\"><b>{}</b>\n",
-                anchor, escaped_word, escaped_word
-            )?;
-        } else {
-            write!(out,
-                "<idx:entry name=\"default\" scriptable=\"yes\" spell=\"yes\">\n  <idx:short>\n    <idx:orth value=\"{}\"><b>{}</b>\n",
-                escaped_word, escaped_word
-            )?;
-        }
+        let anchor = sanitize_anchor_id(&escaped_word);
+        write!(out,
+            "<idx:entry name=\"default\" scriptable=\"yes\" spell=\"yes\" id=\"hw_{}\">\n  <idx:short>\n    <idx:orth value=\"{}\"><b>{}</b>\n",
+            anchor, escaped_word, escaped_word
+        )?;
 
         if !all_variations.is_empty() {
             out.write_all(b"      <idx:infl>\n")?;
@@ -494,10 +510,8 @@ impl<'a> HtmlGenerator<'a> {
                 }
 
                 let mut pos_display = self.format_pos(&effective_pos);
-                if self.params.is_full_build() {
-                    if let Some(head_info) = self.get_head_info_for_pos(pos_entries.as_slice(), word) {
-                        pos_display = format!("{}, {}", pos_display, head_info);
-                    }
+                if let Some(head_info) = self.get_head_info_for_pos(pos_entries.as_slice(), word) {
+                    pos_display = format!("{}, {}", pos_display, head_info);
                 }
                 write!(out, "  <p><i>{}</i></p>\n", escape_html(&pos_display))?;
 
@@ -509,16 +523,14 @@ impl<'a> HtmlGenerator<'a> {
                     } else {
                         write!(out, "  <p class='def'>{}</p>\n", self.linkify_definition(&clean))?;
                     }
-                    if self.params.is_full_build() {
-                        if let Some(ex) = all_examples.get(def_idx).and_then(|e| e.as_ref()) {
-                            if !ex.text.is_empty() {
-                                let ex_text = format_example_text(ex);
-                                let ex_trans = escape_html(&ex.translation);
-                                if !ex_trans.is_empty() {
-                                    write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
-                                } else {
-                                    write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
-                                }
+                    if let Some(ex) = all_examples.get(def_idx).and_then(|e| e.as_ref()) {
+                        if !ex.text.is_empty() {
+                            let ex_text = format_example_text(ex);
+                            let ex_trans = escape_html(&ex.translation);
+                            if !ex_trans.is_empty() {
+                                write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
+                            } else {
+                                write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
                             }
                         }
                     }
@@ -544,10 +556,8 @@ impl<'a> HtmlGenerator<'a> {
                 }
 
                 let mut pos_display = self.format_pos(&effective_pos);
-                if self.params.is_full_build() {
-                    if let Some(head_info) = self.get_head_info_for_pos(&[entry], word) {
-                        pos_display = format!("{}, {}", pos_display, head_info);
-                    }
+                if let Some(head_info) = self.get_head_info_for_pos(&[entry], word) {
+                    pos_display = format!("{}, {}", pos_display, head_info);
                 }
                 write!(out, "  <p><i>{}</i></p>\n", escape_html(&pos_display))?;
 
@@ -555,16 +565,14 @@ impl<'a> HtmlGenerator<'a> {
                     for (def_idx, definition) in defs.iter().enumerate() {
                         let clean = strip_def_qualifiers(definition);
                         write!(out, "  <p class='def'>{}. {}</p>\n", def_idx + 1, self.linkify_definition(&clean))?;
-                        if self.params.is_full_build() {
-                            if let Some(ex) = entry_examples.get(def_idx).and_then(|e| e.as_ref()) {
-                                if !ex.text.is_empty() {
-                                    let ex_text = format_example_text(ex);
-                                    let ex_trans = escape_html(&ex.translation);
-                                    if !ex_trans.is_empty() {
-                                        write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
-                                    } else {
-                                        write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
-                                    }
+                        if let Some(ex) = entry_examples.get(def_idx).and_then(|e| e.as_ref()) {
+                            if !ex.text.is_empty() {
+                                let ex_text = format_example_text(ex);
+                                let ex_trans = escape_html(&ex.translation);
+                                if !ex_trans.is_empty() {
+                                    write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
+                                } else {
+                                    write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
                                 }
                             }
                         }
@@ -573,16 +581,14 @@ impl<'a> HtmlGenerator<'a> {
                     for (def_idx, definition) in defs.iter().enumerate() {
                         let clean = strip_def_qualifiers(definition);
                         write!(out, "  <p class='def'>{}</p>\n", self.linkify_definition(&clean))?;
-                        if self.params.is_full_build() {
-                            if let Some(ex) = entry_examples.get(def_idx).and_then(|e| e.as_ref()) {
-                                if !ex.text.is_empty() {
-                                    let ex_text = format_example_text(ex);
-                                    let ex_trans = escape_html(&ex.translation);
-                                    if !ex_trans.is_empty() {
-                                        write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
-                                    } else {
-                                        write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
-                                    }
+                        if let Some(ex) = entry_examples.get(def_idx).and_then(|e| e.as_ref()) {
+                            if !ex.text.is_empty() {
+                                let ex_text = format_example_text(ex);
+                                let ex_trans = escape_html(&ex.translation);
+                                if !ex_trans.is_empty() {
+                                    write!(out, "  <p class='ex'>{} - {}</p>\n", ex_text, ex_trans)?;
+                                } else {
+                                    write!(out, "  <p class='ex'>{}</p>\n", ex_text)?;
                                 }
                             }
                         }
@@ -591,7 +597,7 @@ impl<'a> HtmlGenerator<'a> {
 
                 if let Some(etym) = &entry.etymology {
                     let trimmed = etym.trim();
-                    if !trimmed.is_empty() && self.params.enable_etymology {
+                    if !trimmed.is_empty() {
                         let stripped = strip_transliterations(trimmed);
                         let cleaned = clean_etymology(&stripped);
                         if !cleaned.is_empty() {
@@ -694,7 +700,6 @@ impl<'a> HtmlGenerator<'a> {
     }
 
     fn linkify_definition(&self, text: &str) -> String {
-        if !self.params.enable_links { return escape_html(text); }
         let re = greek_word_re();
         let mut out = String::new();
         let mut last = 0;
@@ -702,10 +707,18 @@ impl<'a> HtmlGenerator<'a> {
             // non-match portion
             out.push_str(&escape_html(&text[last..m.start()]));
             let part = m.as_str();
-            if self.entries.contains_key(&part.to_string()) {
+            if let Some(&bucket) = self.headword_buckets.get(part) {
                 let escaped = escape_html(part);
                 let anchor = sanitize_anchor_id(&escaped);
-                out.push_str(&format!("<a href=\"#hw_{}\">{}</a>", anchor, escaped));
+                // Always file-qualify cross-reference hrefs. Entries now live
+                // in per-letter content files, and we avoid threading the
+                // emitting-bucket through write_entry by qualifying every link.
+                out.push_str(&format!(
+                    "<a href=\"{}#hw_{}\">{}</a>",
+                    bucket_filename(bucket),
+                    anchor,
+                    escaped
+                ));
             } else {
                 out.push_str(&escape_html(part));
             }
@@ -732,10 +745,10 @@ impl<'a> HtmlGenerator<'a> {
         } else {
             println!("  Warning: cover image not found at {}", cover_src.display());
         }
-
-        let content = "<html>\n  <head>\n    <meta content=\"text/html; charset=utf-8\" http-equiv=\"content-type\" />\n    <style>\n      html, body { margin: 0; padding: 0; height: 100%; }\n      body { text-align: center; page-break-after: always; }\n      img { max-width: 100%; max-height: 100vh; height: auto; page-break-after: always; }\n    </style>\n  </head>\n  <body>\n    <div style=\"page-break-after: always;\"><img src=\"cover.jpg\" alt=\"Lemma Greek Dictionary\" /></div>\n  </body>\n</html>\n";
-        let mut f = File::create(self.output_dir.join("cover.html"))?;
-        f.write_all(content.as_bytes())?;
+        // Kindle renders the cover from the <item properties="coverimage"/>
+        // manifest entry, so no HTML cover page is emitted. KPG §4.2 / rule
+        // R4.2.4 explicitly warns against an HTML cover page in addition to
+        // the cover image.
         Ok(())
     }
 
@@ -799,8 +812,12 @@ impl<'a> HtmlGenerator<'a> {
         ));
 
         let body = lines.join("\n");
+        // XHTML 1.0 forbids raw text and inline elements (<br/>, <a>, etc.)
+        // as direct children of <body>. Wrap the existing <br/>-separated
+        // content in a single <div> so strict validators stop rejecting it.
+        // <head> must also contain a <title>.
         let content = format!(
-            "<html>\n  <head>\n    <meta content=\"text/html; charset=utf-8\" http-equiv=\"content-type\" />\n  </head>\n  <body>\n{}\n  </body>\n</html>\n",
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n  <head>\n    <title>Copyright</title>\n    <meta content=\"text/html; charset=utf-8\" http-equiv=\"content-type\" />\n  </head>\n  <body>\n    <div>\n{}\n    </div>\n  </body>\n</html>\n",
             body
         );
         let mut f = File::create(self.output_dir.join("copyright.html"))?;
@@ -828,12 +845,16 @@ impl<'a> HtmlGenerator<'a> {
             String::new()
         };
 
+        // XHTML 1.0 forbids inline children (<span>, <br/>) directly under
+        // <body>. Wrap the tagline in <p>, drop the stray <br/> spacers that
+        // sat between block-level headings, keep the <style> element with an
+        // explicit type attribute, and add the required <title>.
+        let escaped_name = escape_html(dict_name_s);
         let content = format!(
-            "<html>\n  <head>\n    <meta content=\"text/html; charset=utf-8\" http-equiv=\"content-type\" />\n    <style>p {{ text-indent: 0; margin: 0.3em 0; }}</style>\n  </head>\n  <body>\n    <h2>{}</h2>\n    <span>{}</span>\n    <br/><br/><h3>Features</h3>\n{}\n    <br/><h3>To Set as Default Greek Dictionary</h3>\n    <ul>\n      <li>Look up any Greek word in your book</li>\n      <li>Tap the dictionary name in the popup</li>\n      <li>Select \"{}\"</li>\n    </ul>\n  </body>\n</html>\n",
-            escape_html(dict_name_s),
-            escape_html(tagline),
-            features_block,
-            escape_html(dict_name_s),
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n  <head>\n    <title>{name}</title>\n    <meta content=\"text/html; charset=utf-8\" http-equiv=\"content-type\" />\n    <style type=\"text/css\">p {{ text-indent: 0; margin: 0.3em 0; }}</style>\n  </head>\n  <body>\n    <h2>{name}</h2>\n    <p>{tagline}</p>\n    <h3>Features</h3>\n{features}\n    <h3>To Set as Default Greek Dictionary</h3>\n    <ul>\n      <li>Look up any Greek word in your book</li>\n      <li>Tap the dictionary name in the popup</li>\n      <li>Select \"{name}\"</li>\n    </ul>\n  </body>\n</html>\n",
+            name = escaped_name,
+            tagline = escape_html(tagline),
+            features = features_block,
         );
         let mut f = File::create(self.output_dir.join("usage.html"))?;
         f.write_all(content.as_bytes())?;
@@ -841,23 +862,16 @@ impl<'a> HtmlGenerator<'a> {
     }
 
     fn default_edition_name(&self) -> String {
-        if self.params.is_full_build() {
-            "Lemma Greek Dictionary".to_string()
-        } else {
-            "Lemma Greek Basic Dictionary".to_string()
-        }
+        "Lemma Greek Dictionary".to_string()
     }
 
     fn create_opf_file(&mut self) -> std::io::Result<()> {
         let source_name = if self.params.source_lang == "en" { "en-el" } else { "el-el" };
-        let edition_tag = if !self.params.is_full_build() { "Basic" } else { "" };
-        // Stable per-edition unique identifier. NO date suffix - that's the
-        // whole point: every new build of the same edition has the same UUID
-        // so Kindle treats new versions as in-place upgrades, not as fresh
-        // dictionaries piling up alongside the old ones.
+        // Stable unique identifier. NO date suffix and NO edition tag -
+        // lemma now ships a single unified edition, so Kindle treats new
+        // versions as in-place upgrades not fresh dictionaries.
         let unique_id = format!(
-            "LemmaGreek{}{}",
-            edition_tag,
+            "LemmaGreek{}",
             source_name.to_uppercase().replace('-', "")
         );
         let display_title = self.params.front_matter
@@ -866,24 +880,64 @@ impl<'a> HtmlGenerator<'a> {
             .map(|s| s.to_string())
             .unwrap_or_else(|| self.default_edition_name());
         let out_lang = if self.params.source_lang == "en" { "en" } else { "el" };
-        let opf_filename = format!(
-            "lemma_greek_{}{}.opf",
-            self.params.source_lang, self.params.build_tag
-        );
+        let opf_filename = format!("lemma_greek_{}.opf", self.params.source_lang);
 
         let extraction = self.params.extraction_date.clone().unwrap_or_else(|| "Unknown".to_string());
 
+        // OPF 2.0 <dc:date> must follow W3CDTF (ISO 8601). build_date is
+        // YYYYMMDD elsewhere in the pipeline; convert to YYYY-MM-DD here.
+        let iso_build_date = if self.params.build_date.len() == 8
+            && self.params.build_date.chars().all(|c| c.is_ascii_digit())
+        {
+            format!(
+                "{}-{}-{}",
+                &self.params.build_date[..4],
+                &self.params.build_date[4..6],
+                &self.params.build_date[6..8]
+            )
+        } else {
+            self.params.build_date.clone()
+        };
+
+        // Content is split across one XHTML per Greek letter (plus a "misc"
+        // bucket for non-Greek headwords). Manifest and spine loop over the
+        // buckets that actually received entries during content generation.
+        let content_manifest = self
+            .buckets_used
+            .iter()
+            .map(|&b| {
+                format!(
+                    "    <item id=\"{id}\"\n          href=\"{href}\"\n          media-type=\"application/xhtml+xml\" />",
+                    id = bucket_id(b),
+                    href = bucket_filename(b)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let content_spine = self
+            .buckets_used
+            .iter()
+            .map(|&b| format!("    <itemref idref=\"{}\"/>", bucket_id(b)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let first_content_href = self
+            .buckets_used
+            .first()
+            .map(|&b| bucket_filename(b))
+            .unwrap_or_else(|| "content_00.html".to_string());
+
         let content = format!(
-r#"<?xml version="1.0"?>
+r#"<?xml version="1.0" encoding="UTF-8"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId">
-  <metadata>
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
     <dc:title>{title}</dc:title>
     <dc:creator opf:role="aut">Francisco Riordan</dc:creator>
     <dc:language>el</dc:language>
     <dc:publisher>Lemma</dc:publisher>
     <dc:rights>Creative Commons Attribution-ShareAlike 4.0 International</dc:rights>
     <dc:date>{build_date}</dc:date>
-    <dc:identifier id="BookId" opf:scheme="UUID">{uid}</dc:identifier>
+    <dc:identifier id="BookId">{uid}</dc:identifier>
+    <meta name="cover" content="cimage" />
     <meta name="wiktionary-extraction-date" content="{extraction}" />
     <meta name="dictionary-name" content="{title}" />
     <meta name="generator" content="lemma" />
@@ -908,26 +962,27 @@ r#"<?xml version="1.0"?>
     <item id="copyright"
           href="copyright.html"
           media-type="application/xhtml+xml" />
-    <item id="content"
-          href="content.html"
-          media-type="application/xhtml+xml" />
+{content_manifest}
   </manifest>
   <spine toc="ncx">
     <itemref idref="usage" />
     <itemref idref="copyright"/>
-    <itemref idref="content"/>
+{content_spine}
   </spine>
   <guide>
-    <reference type="index" title="IndexName" href="content.html"/>
+    <reference type="index" title="Dictionary" href="{first_content_href}"/>
   </guide>
 </package>
 "#,
             title = display_title,
-            build_date = self.params.build_date,
+            build_date = iso_build_date,
             uid = unique_id,
             extraction = extraction,
             outlang = out_lang,
             version = crate::version::LEMMA_VERSION,
+            content_manifest = content_manifest,
+            content_spine = content_spine,
+            first_content_href = first_content_href,
         );
 
         let opf_path = self.output_dir.join(&opf_filename);
@@ -939,13 +994,31 @@ r#"<?xml version="1.0"?>
 
     fn create_toc_ncx(&self) -> std::io::Result<()> {
         let source_name = if self.params.source_lang == "en" { "en-el" } else { "el-el" };
-        let edition_tag = if !self.params.is_full_build() { "Basic" } else { "" };
-        let unique_id = format!("LemmaGreek{}{}", edition_tag, source_name.to_uppercase().replace('-', ""));
+        let unique_id = format!("LemmaGreek{}", source_name.to_uppercase().replace('-', ""));
         let display_title = self.params.front_matter
             .get("edition_name")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| self.default_edition_name());
+
+        // Emit one navPoint per populated bucket so the Kindle TOC offers
+        // jump-to-letter navigation.
+        let letter_navpoints = self
+            .buckets_used
+            .iter()
+            .enumerate()
+            .map(|(i, &b)| {
+                let play_order = 3 + i;
+                format!(
+                    "    <navPoint id=\"{id}\" playOrder=\"{play_order}\">\n      <navLabel><text>{label}</text></navLabel>\n      <content src=\"{href}\"/>\n    </navPoint>",
+                    id = bucket_id(b),
+                    play_order = play_order,
+                    label = bucket_label(b),
+                    href = bucket_filename(b)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let content = format!(
 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -961,27 +1034,21 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
     <text>{title}</text>
   </docTitle>
   <navMap>
-    <navPoint id="cover" playOrder="1">
-      <navLabel><text>Cover</text></navLabel>
-      <content src="cover.html"/>
-    </navPoint>
-    <navPoint id="usage" playOrder="2">
+    <navPoint id="usage" playOrder="1">
       <navLabel><text>Usage</text></navLabel>
       <content src="usage.html"/>
     </navPoint>
-    <navPoint id="copyright" playOrder="3">
+    <navPoint id="copyright" playOrder="2">
       <navLabel><text>Copyright</text></navLabel>
       <content src="copyright.html"/>
     </navPoint>
-    <navPoint id="content" playOrder="4">
-      <navLabel><text>Dictionary</text></navLabel>
-      <content src="content.html"/>
-    </navPoint>
+{letter_navpoints}
   </navMap>
 </ncx>
 "#,
             uid = unique_id,
             title = display_title,
+            letter_navpoints = letter_navpoints,
         );
         let mut f = File::create(self.output_dir.join("toc.ncx"))?;
         f.write_all(content.as_bytes())?;
@@ -991,8 +1058,19 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
 
 // --- Free helpers ---
 
-fn html_header() -> &'static str {
-    "<html xmlns:math=\"http://exslt.org/math\" xmlns:svg=\"http://www.w3.org/2000/svg\"\n      xmlns:tl=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:saxon=\"http://saxon.sf.net/\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"\n      xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n      xmlns:cx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n      xmlns:mbp=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:mmc=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:idx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\">\n  <head>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n    <style>\n      h5 { font-size: 1em; margin: 0; }\n      p { margin: 0.2em 0; }\n      b { font-weight: bold; }\n      i { font-style: italic; }\n      .pos { font-style: italic; }\n      .def { margin-left: 20px; }\n      .ex { margin-left: 20px; }\n      .etym { margin-top: 0.5em; margin-left: 0; background-color: #f0f0f0; padding: 0.2em 0.4em; }\n      hr { margin: 5px 0; border: none; border-top: 1px solid #ccc; }\n    </style>\n  </head>\n  <body>\n    <mbp:frameset>\n"
+fn html_header(title: &str) -> String {
+    // Header layout matches KPG §15.3.2 exactly. Do NOT add
+    // xmlns="http://www.w3.org/1999/xhtml" as a default namespace here:
+    // Amazon's dictionary converter is built to parse the unnamespaced
+    // KPG example verbatim, and adding a default XHTML namespace puts
+    // every unprefixed element into the XHTML namespace, which upstream
+    // dictionary indexing pipelines do not recognize. <title> + style
+    // type="text/css" stay in because they are harmless in HTML mode and
+    // help any downstream tooling that happens to parse strictly.
+    format!(
+        "<html xmlns:math=\"http://exslt.org/math\" xmlns:svg=\"http://www.w3.org/2000/svg\"\n      xmlns:tl=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:saxon=\"http://saxon.sf.net/\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"\n      xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n      xmlns:cx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n      xmlns:mbp=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:mmc=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\"\n      xmlns:idx=\"https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf\">\n  <head>\n    <title>{}</title>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n    <style type=\"text/css\">\n      h5 {{ font-size: 1em; margin: 0; }}\n      p {{ margin: 0.2em 0; }}\n      b {{ font-weight: bold; }}\n      i {{ font-style: italic; }}\n      .pos {{ font-style: italic; }}\n      .def {{ margin-left: 20px; }}\n      .ex {{ margin-left: 20px; }}\n      .etym {{ margin-top: 0.5em; margin-left: 0; background-color: #f0f0f0; padding: 0.2em 0.4em; }}\n      hr {{ margin: 5px 0; border: none; border-top: 1px solid #ccc; }}\n    </style>\n  </head>\n  <body>\n    <mbp:frameset>\n",
+        escape_html(title)
+    )
 }
 
 fn html_footer() -> &'static str {
@@ -1001,6 +1079,41 @@ fn html_footer() -> &'static str {
 
 fn sanitize_anchor_id(text: &str) -> String {
     text.replace(' ', "_")
+}
+
+/// Compute the letter-bucket index for a headword. Returns 1..=24 for
+/// Α..Ω (accent-insensitive, case-insensitive) and 0 for any non-Greek
+/// first character (numerals, archaic numerals, Latin abbreviations, etc.).
+fn bucket_for_headword(word: &str) -> u8 {
+    let normalized = normalize_for_sorting(word);
+    let Some(first) = normalized.chars().next() else { return 0; };
+    match first {
+        'α' => 1,  'β' => 2,  'γ' => 3,  'δ' => 4,  'ε' => 5,
+        'ζ' => 6,  'η' => 7,  'θ' => 8,  'ι' => 9,  'κ' => 10,
+        'λ' => 11, 'μ' => 12, 'ν' => 13, 'ξ' => 14, 'ο' => 15,
+        'π' => 16, 'ρ' => 17, 'σ' | 'ς' => 18, 'τ' => 19, 'υ' => 20,
+        'φ' => 21, 'χ' => 22, 'ψ' => 23, 'ω' => 24,
+        _ => 0,
+    }
+}
+
+fn bucket_filename(bucket: u8) -> String {
+    format!("content_{:02}.html", bucket)
+}
+
+fn bucket_id(bucket: u8) -> String {
+    format!("content_{:02}", bucket)
+}
+
+fn bucket_label(bucket: u8) -> &'static str {
+    match bucket {
+        1 => "Α", 2 => "Β", 3 => "Γ", 4 => "Δ", 5 => "Ε",
+        6 => "Ζ", 7 => "Η", 8 => "Θ", 9 => "Ι", 10 => "Κ",
+        11 => "Λ", 12 => "Μ", 13 => "Ν", 14 => "Ξ", 15 => "Ο",
+        16 => "Π", 17 => "Ρ", 18 => "Σ", 19 => "Τ", 20 => "Υ",
+        21 => "Φ", 22 => "Χ", 23 => "Ψ", 24 => "Ω",
+        _ => "Other",
+    }
 }
 
 fn normalize_for_sorting(word: &str) -> String {

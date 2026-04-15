@@ -1,6 +1,6 @@
 // Structured front-matter content for the copyright and usage pages.
-// Matches the Python basic-edition defaults and accepts a JSON override
-// file that deep-merges on top of the defaults.
+// Lemma ships a single unified edition; this file holds the defaults and
+// accepts a JSON override file that deep-merges on top of them.
 
 use serde_json::{Map, Value, json};
 use std::fs;
@@ -8,11 +8,11 @@ use std::path::{Path, PathBuf};
 
 pub type FrontMatter = Value;
 
-pub fn basic_defaults() -> Value {
+pub fn default_front_matter() -> Value {
     json!({
         "edition_name": Value::Null,
         "cover_path": Value::Null,
-        "tagline": "A Greek-English dictionary built from English Wiktionary. Look up any Greek word while reading, inflected forms automatically redirect to their headword.",
+        "tagline": "A Greek-English dictionary built from English Wiktionary with gender, variant forms, etymology, usage examples, cross-reference links, and polytonic lookup support. Inflected forms automatically redirect to their headword.",
         "copyright": {
             "holder": "Francisco Riordan",
             "extra_lines": [],
@@ -49,9 +49,12 @@ pub fn basic_defaults() -> Value {
             }
         ],
         "features": [
-            "31,000+ headwords with 660,000+ inflected lookup forms",
+            "31,000+ headwords with 689,000+ inflected lookup forms",
             "Both monotonic and polytonic Greek supported",
-            "Part of speech tags",
+            "Part of speech with gender and variant forms (e.g., plural, feminine, neuter)",
+            "14,000+ etymologies (transliterations stripped)",
+            "5,000+ usage examples with bolded headwords",
+            "Cross-reference links between related entries",
         ]
     })
 }
@@ -77,7 +80,7 @@ fn deep_merge(base: &mut Value, overrides: Value) {
 }
 
 pub fn load_front_matter(path: Option<&Path>) -> Result<FrontMatter, Box<dyn std::error::Error>> {
-    let mut base = basic_defaults();
+    let mut base = default_front_matter();
     let Some(path) = path else { return Ok(base); };
 
     let raw = fs::read_to_string(path)?;

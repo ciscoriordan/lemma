@@ -90,8 +90,8 @@ const KNOWN_LOOKUPS: &[(&str, &str, &str)] = &[
 ];
 
 // Expected POS lines - the POS must start with the expected text.
-// Full builds have gender/variant info (e.g., "noun, feminine (plural ...)"),
-// basic builds have just the POS type. Using starts_with handles both.
+// The unified edition always emits gender/variant info (e.g., "noun,
+// feminine (plural ...)"), so starts_with is enough to match.
 const KNOWN_POS_FORMATS: &[(&str, &str, &str)] = &[
     ("θάλασσα", "noun", "POS starts with 'noun'"),
     ("σκύλος", "noun", "POS starts with 'noun'"),
@@ -299,9 +299,30 @@ fn take_chars(s: &str, n: usize) -> String {
 
 // ----------------- Build dir discovery -----------------
 //
-// Lemma builds always go to the same stable directory name per edition
-// (e.g. `lemma_greek_en_basic/`), so there is no date to group by. We just
-// take the matching dirs and let the test loop iterate over them.
+// Lemma builds always go to a stable directory name (`lemma_greek_en`),
+// so there is no date to group by. We just take the matching dirs and
+// let the test loop iterate over them.
+
+/// Collect every `content_NN.html` file in a build directory, sorted.
+/// Dictionary content is split across per-letter files; the previous single
+/// `content.html` no longer exists.
+fn find_content_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with("content_") && name.ends_with(".html") {
+                out.push(e.path());
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn has_content_files(dir: &Path) -> bool {
+    !find_content_files(dir).is_empty()
+}
 
 fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -313,17 +334,16 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
         } else {
             cwd.join(pat)
         };
-        if direct.is_dir() && direct.join("content.html").exists() {
+        if direct.is_dir() && has_content_files(&direct) {
             return vec![direct];
         }
         // Otherwise treat the pattern as a name fragment to match against
-        // any directory in the cwd that contains a content.html.
+        // any directory in the cwd that contains content_*.html files.
         let mut out = Vec::new();
         if let Ok(entries) = fs::read_dir(&cwd) {
             for e in entries.flatten() {
                 let name = e.file_name().to_string_lossy().into_owned();
-                if name.contains(pat) && e.path().is_dir() && e.path().join("content.html").exists()
-                {
+                if name.contains(pat) && e.path().is_dir() && has_content_files(&e.path()) {
                     out.push(e.path());
                 }
             }
@@ -332,9 +352,9 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
         return out;
     }
 
-    // No pattern: take every lemma_greek_* dir that has a content.html, but
-    // skip percentage test builds (`_10pct`, `_1.0pct`, etc.) so the default
-    // run only tests the real builds.
+    // No pattern: take every lemma_greek_* dir that has content_*.html files,
+    // but skip percentage test builds (`_10pct`, `_1.0pct`, etc.) so the
+    // default run only tests the real builds.
     let pct_re = Regex::new(r"_\d+(\.\d+)?pct$").unwrap();
 
     let mut all_dirs: Vec<PathBuf> = Vec::new();
@@ -348,7 +368,7 @@ fn find_build_dirs(pattern: Option<&str>) -> Vec<PathBuf> {
                 continue;
             }
             let p = e.path();
-            if p.is_dir() && p.join("content.html").exists() {
+            if p.is_dir() && has_content_files(&p) {
                 all_dirs.push(p);
             }
         }
@@ -586,7 +606,7 @@ fn parse_entries(content: &str) -> Vec<ParsedEntry> {
     entries
 }
 
-fn run_position_verification_tests(content_html_path: &Path) -> bool {
+fn run_position_verification_tests(content_html_paths: &[PathBuf]) -> bool {
     let mut passed = 0usize;
     let mut failed = 0usize;
     let mut skipped = 0usize;
@@ -596,28 +616,41 @@ fn run_position_verification_tests(content_html_path: &Path) -> bool {
         POSITION_VERIFICATION_CASES.len()
     );
 
-    let content = match fs::read_to_string(content_html_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Cannot read {}: {}", content_html_path.display(), e);
-            return false;
+    // The position scanner expects a single `<html>…<body>…</body></html>`
+    // document. Entries now live across per-letter files, so extract each
+    // file's body and concatenate so every headword is reachable by the
+    // positional searches below.
+    let body_inner_re = Regex::new(r"(?s)<body[^>]*>(.*?)</body>").unwrap();
+    let head_re = Regex::new(r"(?s)<head[^>]*>.*?</head>").unwrap();
+    let mut combined_body = String::new();
+    let mut first_head: Option<String> = None;
+    let mut combined_raw = String::new();
+    for path in content_html_paths {
+        let raw = match fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Cannot read {}: {}", path.display(), e);
+                return false;
+            }
+        };
+        if first_head.is_none() {
+            if let Some(c) = head_re.captures(&raw) {
+                first_head = Some(c[0].to_string());
+            }
         }
-    };
-
+        if let Some(c) = body_inner_re.captures(&raw) {
+            combined_body.push_str(c[1].trim());
+            combined_body.push('\n');
+        }
+        combined_raw.push_str(&raw);
+    }
+    // Parse entries from the concatenation so every headword is present.
+    let content = combined_raw;
     let entries = parse_entries(&content);
 
-    let stripped = strip_idx_markup(&content);
-    let body_re = Regex::new(r"(?s)<body[^>]*>(.*?)</body>").unwrap();
-    let body = body_re
-        .captures(&stripped)
-        .map(|c| c[1].trim().to_string())
-        .unwrap_or_else(|| stripped.clone());
-    let head_re = Regex::new(r"(?s)<head[^>]*>.*?</head>").unwrap();
-    let head = head_re
-        .captures(&stripped)
-        .map(|c| c[0].to_string())
-        .unwrap_or_else(|| "<head><guide></guide></head>".to_string());
-    let text = format!("<html>{}<body>{}  <mbp:pagebreak/></body></html>", head, body);
+    let stripped_body = strip_idx_markup(&combined_body);
+    let head = first_head.unwrap_or_else(|| "<head><guide></guide></head>".to_string());
+    let text = format!("<html>{}<body>{}  <mbp:pagebreak/></body></html>", head, stripped_body);
     let text_bytes = text.as_bytes();
 
     // Simulate find_entry_positions with entry-boundary check.
@@ -734,52 +767,104 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 // ----------------- Anchor link tests -----------------
 
-fn run_anchor_link_tests(content_html_path: &Path) -> bool {
+/// Aggregate-anchor-link test across every `content_NN.html` in a build dir.
+///
+/// Cross-reference links are file-qualified (`content_11.html#hw_λέγω`), so
+/// validation has two parts: (1) every `id="hw_X"` across all bucket files
+/// is mapped to the file it lives in, then (2) every `<a href="FILE#hw_X">`
+/// is checked against that map so we catch links that point at the wrong
+/// bucket as well as links with no matching anchor at all.
+fn run_anchor_link_tests_dir(build_dir: &Path, content_files: &[PathBuf]) -> bool {
     let mut passed = 0usize;
     let mut failed = 0usize;
-
-    let filename = content_html_path
+    let dir_name = build_dir
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    println!("\nRunning anchor link tests on {}...\n", filename);
+    println!(
+        "\nRunning anchor link tests on {} ({} content files)...\n",
+        dir_name,
+        content_files.len()
+    );
 
-    let content = match fs::read_to_string(content_html_path) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-
-    let link_re = Regex::new(r##"<a href="#(hw_[^"]+)""##).unwrap();
     let id_re = Regex::new(r##"id="(hw_[^"]+)""##).unwrap();
+    let link_re = Regex::new(r##"<a href="(content_[0-9]+\.html)#(hw_[^"]+)""##).unwrap();
 
-    let link_targets: HashSet<String> = link_re
-        .captures_iter(&content)
-        .map(|c| c[1].to_string())
-        .collect();
-    let anchor_ids: HashSet<String> = id_re
-        .captures_iter(&content)
-        .map(|c| c[1].to_string())
-        .collect();
+    // anchor_id -> owning filename
+    let mut anchor_owner: HashMap<String, String> = HashMap::new();
+    // filename -> all links emitted from that file
+    let mut per_file_links: Vec<(String, Vec<(String, String)>)> = Vec::new();
 
-    if link_targets.is_empty() {
+    for cf in content_files {
+        let content = match fs::read_to_string(cf) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let filename = cf
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        for cap in id_re.captures_iter(&content) {
+            anchor_owner.insert(cap[1].to_string(), filename.clone());
+        }
+        let links: Vec<(String, String)> = link_re
+            .captures_iter(&content)
+            .map(|c| (c[1].to_string(), c[2].to_string()))
+            .collect();
+        per_file_links.push((filename, links));
+    }
+
+    let total_links: usize = per_file_links.iter().map(|(_, v)| v.len()).sum();
+    if total_links == 0 {
         println!("  (no cross-reference links found, skipping)");
         return true;
     }
 
-    let missing: Vec<&String> = link_targets.difference(&anchor_ids).collect();
-    if !missing.is_empty() {
-        failed += 1;
-        println!("  FAIL  {} links have no matching anchor ID", missing.len());
-        let mut sorted: Vec<&String> = missing.clone();
-        sorted.sort();
-        for target in sorted.iter().take(5) {
-            println!("        missing anchor: {}", target);
+    let mut missing: Vec<String> = Vec::new();
+    let mut wrong_file: Vec<String> = Vec::new();
+    for (src_file, links) in &per_file_links {
+        for (target_file, anchor_id) in links {
+            match anchor_owner.get(anchor_id) {
+                None => {
+                    missing.push(format!("{} -> {}#{}", src_file, target_file, anchor_id));
+                }
+                Some(owner) if owner != target_file => {
+                    wrong_file.push(format!(
+                        "{} -> {}#{} (anchor actually in {})",
+                        src_file, target_file, anchor_id, owner
+                    ));
+                }
+                _ => {}
+            }
         }
-        if sorted.len() > 5 {
-            println!("        ... and {} more", sorted.len() - 5);
-        }
-    } else {
+    }
+
+    if missing.is_empty() && wrong_file.is_empty() {
         passed += 1;
+        println!("  {} links all resolve to valid anchors in the expected files", total_links);
+    } else {
+        failed += 1;
+        if !missing.is_empty() {
+            println!("  FAIL  {} links have no matching anchor ID", missing.len());
+            for m in missing.iter().take(5) {
+                println!("        {}", m);
+            }
+            if missing.len() > 5 {
+                println!("        ... and {} more", missing.len() - 5);
+            }
+        }
+        if !wrong_file.is_empty() {
+            println!(
+                "  FAIL  {} links point at the wrong content file",
+                wrong_file.len()
+            );
+            for w in wrong_file.iter().take(5) {
+                println!("        {}", w);
+            }
+            if wrong_file.len() > 5 {
+                println!("        ... and {} more", wrong_file.len() - 5);
+            }
+        }
     }
 
     let total = passed + failed;
@@ -809,16 +894,23 @@ fn main() -> ExitCode {
 
     let mut index = DictionaryIndex::new();
 
-    println!("Loading {} content file(s)...", dirs.len());
+    println!("Loading {} build dir(s)...", dirs.len());
     let start = Instant::now();
     for d in &dirs {
-        let content_path = d.join("content.html");
         let name = d
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        index.load_content_html(&content_path);
-        println!("  {}: {} headwords so far", name, index.headwords.len());
+        let content_files = find_content_files(d);
+        for cf in &content_files {
+            index.load_content_html(cf);
+        }
+        println!(
+            "  {}: {} content files, {} headwords so far",
+            name,
+            content_files.len(),
+            index.headwords.len()
+        );
     }
     let elapsed = start.elapsed().as_secs_f64();
     println!(
@@ -833,21 +925,24 @@ fn main() -> ExitCode {
     all_passed &= run_lookup_tests(&index, "lookup");
     all_passed &= run_pos_tests(&index);
 
-    // Position verification + anchor link tests on each content.html.
+    // Position verification runs per content file. Anchor link tests are
+    // aggregated across the whole build dir so file-qualified cross-refs
+    // (e.g. `content_11.html#hw_λέγω`) can be validated against all anchors.
     for d in &dirs {
-        let content_path = d.join("content.html");
-        if content_path.exists() {
-            all_passed &= run_position_verification_tests(&content_path);
-
-            // Anchor link tests only if the file has cross-reference links.
-            if let Ok(mut head_buf) = read_first_n_bytes(&content_path, 100_000) {
-                if !head_buf.is_empty() {
-                    head_buf.make_ascii_lowercase(); // case-insensitive `<a href="#hw_`
-                    if find_subslice(&head_buf, b"<a href=\"#hw_").is_some() {
-                        all_passed &= run_anchor_link_tests(&content_path);
-                    }
-                }
+        let content_files = find_content_files(d);
+        if !content_files.is_empty() {
+            all_passed &= run_position_verification_tests(&content_files);
+        }
+        let has_cross_refs = content_files.iter().any(|cf| {
+            if let Ok(mut head_buf) = read_first_n_bytes(cf, 100_000) {
+                head_buf.make_ascii_lowercase();
+                find_subslice(&head_buf, b"<a href=\"content_").is_some()
+            } else {
+                false
             }
+        });
+        if has_cross_refs {
+            all_passed &= run_anchor_link_tests_dir(d, &content_files);
         }
     }
 

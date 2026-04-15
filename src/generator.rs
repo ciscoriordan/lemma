@@ -16,9 +16,6 @@ pub struct GeneratorOptions {
     pub limit_percent: Option<f64>,
     pub generate_mobi: bool,
     pub max_inflections: Option<usize>,
-    pub enable_links: bool,
-    pub enable_etymology: bool,
-    pub enable_polytonic: bool,
     pub front_matter_path: Option<PathBuf>,
 }
 
@@ -26,10 +23,6 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     if opts.source_lang != "en" && opts.source_lang != "el" {
         return Err("Source language must be 'en' or 'el'".into());
     }
-
-    let is_full_build = opts.enable_links || opts.enable_etymology;
-    let enable_polytonic = opts.enable_polytonic || is_full_build;
-    let build_tag = if !is_full_build { "_basic".to_string() } else { String::new() };
 
     // Today's date is used for the human-readable "Dictionary created" line
     // on the copyright page, NOT for any filename.
@@ -51,13 +44,7 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     let edition_preview = front_matter.get("edition_name")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            if is_full_build {
-                "Lemma Greek Dictionary".to_string()
-            } else {
-                "Lemma Greek Basic Dictionary".to_string()
-            }
-        });
+        .unwrap_or_else(|| "Lemma Greek Dictionary".to_string());
     println!("  Edition: {}", edition_preview);
 
     // Download
@@ -85,18 +72,15 @@ pub fn run(opts: GeneratorOptions) -> Result<(), Box<dyn std::error::Error>> {
     let entries = std::mem::replace(&mut processor.entries, crate::entry_processor::EntryMap::new());
     drop(processor);
 
-    // HTML generation
+    // HTML generation. Lemma now builds a single unified edition with all
+    // features enabled - no more Basic/Pro split.
     let params = BuildParams {
         source_lang: opts.source_lang.clone(),
         build_date: build_date.clone(),
         extraction_date: final_extraction_date.clone(),
         limit_percent: opts.limit_percent,
         max_inflections: opts.max_inflections,
-        enable_links: opts.enable_links,
-        enable_etymology: opts.enable_etymology,
-        enable_polytonic,
         front_matter,
-        build_tag,
     };
 
     let mut html_gen = HtmlGenerator::new(entries, params, Some(&dilemma));

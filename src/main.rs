@@ -24,18 +24,6 @@ struct Cli {
     #[arg(short = 'm', long = "mobi", default_value_t = false)]
     mobi: bool,
 
-    /// Enable clickable cross-references between entries.
-    #[arg(long = "links", default_value_t = false)]
-    links: bool,
-
-    /// Include etymology information in entries.
-    #[arg(long = "etymology", default_value_t = false)]
-    etymology: bool,
-
-    /// Add polytonic breathing/accent variants as inflections.
-    #[arg(long = "polytonic", default_value_t = false)]
-    polytonic: bool,
-
     /// Path to a JSON file that overrides front-matter fields.
     #[arg(long = "front-matter", value_name = "PATH")]
     front_matter: Option<PathBuf>,
@@ -61,9 +49,6 @@ fn main() {
         limit_percent: cli.limit,
         generate_mobi: cli.mobi,
         max_inflections: cli.inflections,
-        enable_links: cli.links,
-        enable_etymology: cli.etymology,
-        enable_polytonic: cli.polytonic,
         front_matter_path: cli.front_matter,
     };
 

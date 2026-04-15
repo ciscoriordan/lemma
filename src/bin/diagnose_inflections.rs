@@ -34,9 +34,9 @@ fn main() -> ExitCode {
         args
     };
 
-    // Find all content.html files from el-source builds. Match both the
-    // bare `lemma_greek_el` directory and any `lemma_greek_el_*` variant
-    // (e.g. `_basic`), excluding test-percentage builds.
+    // Find all content_NN.html files from el-source builds. Content is
+    // split across per-letter files; collect them all. Exclude any
+    // test-percentage build variants.
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let pct_re = Regex::new(r"_\d+(\.\d+)?pct$").unwrap();
     let mut files: Vec<PathBuf> = Vec::new();
@@ -50,9 +50,14 @@ fn main() -> ExitCode {
             if pct_re.is_match(&name) {
                 continue;
             }
-            let p = e.path().join("content.html");
-            if p.exists() {
-                files.push(p);
+            let dir = e.path();
+            if let Ok(inner) = fs::read_dir(&dir) {
+                for f in inner.flatten() {
+                    let fname = f.file_name().to_string_lossy().into_owned();
+                    if fname.starts_with("content_") && fname.ends_with(".html") {
+                        files.push(f.path());
+                    }
+                }
             }
         }
     }

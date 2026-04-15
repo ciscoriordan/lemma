@@ -16,8 +16,7 @@ impl<'a> EpubGenerator<'a> {
     pub fn generate(&self) -> std::io::Result<PathBuf> {
         println!("\nGenerating EPUB file...");
 
-        // Derive the EPUB filename from the OPF filename so the edition tag
-        // (`_basic` or empty) flows through automatically.
+        // Derive the EPUB filename from the OPF filename.
         let epub_name = self.opf_filename.replace(".opf", ".epub");
         let epub_path = self.output_dir.join(&epub_name);
 
@@ -42,8 +41,8 @@ impl<'a> EpubGenerator<'a> {
         zw.start_file("OEBPS/content.opf", deflated)?;
         zw.write_all(&opf_bytes)?;
 
-        let content_files = ["toc.ncx", "cover.jpg", "cover.html", "usage.html", "copyright.html", "content.html"];
-        for filename in &content_files {
+        let fixed_files = ["toc.ncx", "cover.jpg", "usage.html", "copyright.html"];
+        for filename in &fixed_files {
             let fp = self.output_dir.join(filename);
             if fp.exists() {
                 let mut buf = Vec::new();
@@ -53,6 +52,31 @@ impl<'a> EpubGenerator<'a> {
             } else {
                 println!("  Warning: expected file not found: {}", filename);
             }
+        }
+
+        // Dictionary content is split across per-letter content_NN.html files.
+        // Collect whatever the generator emitted and add them in sorted order
+        // so the EPUB zip is deterministic.
+        let mut content_files: Vec<PathBuf> = fs::read_dir(self.output_dir)?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("content_") && n.ends_with(".html"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        content_files.sort();
+        if content_files.is_empty() {
+            println!("  Warning: no content_*.html files found");
+        }
+        for fp in &content_files {
+            let filename = fp.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let mut buf = Vec::new();
+            File::open(fp)?.read_to_end(&mut buf)?;
+            zw.start_file(format!("OEBPS/{}", filename), deflated)?;
+            zw.write_all(&buf)?;
         }
 
         zw.finish()?;

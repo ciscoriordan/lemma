@@ -34,10 +34,10 @@ jobs:
         working-directory: lemma
         run: cargo test --release
 
-      - name: Build basic dictionary
+      - name: Build dictionary
         working-directory: lemma
         run: ./target/release/lemma
 
       - name: Run integration tests against built dictionary
         working-directory: lemma
-        run: ./target/release/test_dictionary_lookup lemma_greek_en_basic
+        run: ./target/release/test_dictionary_lookup lemma_greek_en

@@ -38,3 +38,5 @@ iliad_polylas/
 # Rust
 target/
 .cargo/config.toml
+samples/
+test_dicts/

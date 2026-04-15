@@ -4,23 +4,24 @@
   <img width="700" alt="Lemma - Modern Greek to English Dictionary for Kindle" src="images/lemma_banner.png">
 </p>
 
-A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (reverse-engineered, ~7,000x faster *kindlegen* replacement). The generator and all helper tools are written in Rust for fast builds of the full dictionary.
+A free Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K inflected form lookups, built from Wiktionary data using [Kindling](https://github.com/ciscoriordan/kindling) (a reverse-engineered, ~7,000x faster *kindlegen* replacement). The generator and all helper tools are written in Rust.
 
-| [Basic](https://github.com/ciscoriordan/lemma/releases) | Pro |
-|:---|:---|
-| ![Basic dictionary](images/screenshot_basic.jpg) | ![Pro dictionary](images/screenshot_pro.jpg) |
-| Definitions<br>Inflections<br>Monotonic | Definitions<br>Inflections<br>Monotonic<br>Polytonic<br>Gender and variants<br>Etymology<br>Examples |
+<p align="center">
+  <img width="600" alt="Lemma dictionary screenshot" src="images/screenshot_pro.jpg">
+</p>
+
+Lemma ships as a single unified edition with every feature the generator supports - definitions, inflections, monotonic and polytonic lookup, gender and declension info, etymology, usage examples, and clickable cross-references.
 
 ## Quick Install
 
-### Installing Dictionaries on Your Kindle
+### Installing on Your Kindle
 
 1. **Connect your Kindle** to your computer via USB cable
 2. **Open the Kindle drive** on your computer
 3. **Navigate to the `documents/dictionaries` folder** on your Kindle
    - If the `dictionaries` folder doesn't exist, create it inside `documents`
-4. **Download the `.mobi` file(s)** from [GitHub Releases](https://github.com/ciscoriordan/lemma/releases) and copy them to `documents/dictionaries`
-   - Alternatively, you can build `.mobi` files locally by running with the `-m` flag (see below)
+4. **Download `lemma_greek_en.mobi`** from [GitHub Releases](https://github.com/ciscoriordan/lemma/releases) and copy it to `documents/dictionaries`
+   - Alternatively, you can build the `.mobi` locally by running with the `-m` flag (see below)
 5. **Safely eject your Kindle** from your computer
 6. **Restart your Kindle**:
    - Hold the power button for 40 seconds, or
@@ -32,28 +33,26 @@ A Modern Greek-English dictionary for Kindle e-readers. 31K headwords, 568K infl
 1. **Open any Greek text** on your Kindle
 2. **Select a Greek word** to look up
 3. **Tap the dictionary name** at the bottom of the popup
-4. **Select "Lemma Greek Basic"** or **"Lemma Greek"** from the list
+4. **Select "Lemma Greek Dictionary"** from the list
 5. The dictionary is now your default for Greek lookups
 
-## Pre-built Dictionaries
+## Pre-built Dictionary
 
 Ready-to-use dictionary files are available on the [Releases page](https://github.com/ciscoriordan/lemma/releases):
 
-### Greek-English Dictionary
+- `lemma_greek_en.mobi` - the full dictionary for sideloading to Kindle devices
+- `lemma_greek_en.epub` - the source EPUB (most users want the MOBI)
 
-- `lemma_greek_en_basic.mobi` - Basic edition: definitions and inflections
-- `lemma_greek_en.mobi` - Pro edition: adds gender/variant info, etymology, cross-reference links, and polytonic lookup support
-
-Filenames are stable across versions, so each new release replaces the previous file in `documents/dictionaries/` on your Kindle in place. Look at the **Build Info** section on the dictionary's copyright page to see which build you have installed (lemma generator version, build date, and Wiktionary extraction date).
+Filenames are stable across versions, so each new release replaces the previous file in `documents/dictionaries/` on your Kindle in place. Check the **Build Info** section on the dictionary's copyright page to see which build you have installed (lemma generator version, build date, and Wiktionary extraction date).
 
 ## Features
 - **Inflection Support**: Automatically links inflected forms to their lemmas, with 2.74M form-to-lemma mappings from [Dilemma](https://github.com/ciscoriordan/dilemma) when available
 - **Lemma Equivalences**: Bridges cases where Wiktionary and Dilemma use different canonical forms for the same word (e.g., `τρώω`/`τρώγω`, `λέω`/`λέγω`), recovering ~742K additional inflections via 6,281 auto-generated equivalence pairs
 - **Pre-Ranked Inflections**: When [Dilemma](https://github.com/ciscoriordan/dilemma)'s `mg_ranked_forms.json` is available (from [HuggingFace Hub](https://huggingface.co/datasets/ciscoriordan/dilemma-data) or locally), inflections arrive pre-ranked by corpus frequency and case-deduplicated. Case variants (φας/Φας) are added after the inflection cap, not before, so each slot goes to a unique form. Falls back to local ranking via [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (OpenSubtitles 2018) if ranked forms aren't available
-- **Polytonic Support** (Pro): Corpus-attested polytonic forms from Greek Wikisource, enabling lookups in pre-1982 polytonic texts
-- **Gender and Variants** (Pro): POS line shows gender and key forms (e.g., "noun, feminine (plural θάλασσες)")
-- **Etymology** (Pro): Word origins with transliterations stripped for clean display
-- **Cross-References** (Pro): Clickable links between related entries
+- **Polytonic Support**: Corpus-attested polytonic forms from Greek Wikisource, enabling lookups in pre-1982 polytonic texts
+- **Gender and Variants**: POS line shows gender and key forms (e.g., "noun, feminine (plural θάλασσες)")
+- **Etymology**: Word origins with transliterations stripped for clean display
+- **Cross-References**: Clickable links between related entries
 - **Clean Formatting**: Optimized for Kindle's dictionary popup interface
 - **Testing Mode**: Create smaller dictionaries for testing (1-100% of entries)
 
@@ -105,11 +104,10 @@ cargo run --release -- -l 10
 - `-l, --limit PERCENT`: Limit to first X% of words (useful for testing)
 - `-m, --mobi`: Also generate `.mobi` via Kindling (for sideloading)
 - `-i, --inflections N`: Max inflections per headword (default: 255)
-- `--links`: Enable clickable cross-references between entries
-- `--etymology`: Include etymology information in entries
-- `--polytonic`: Add polytonic breathing/accent variants as inflections, for looking up words in polytonic Modern Greek books. Increases file size.
-- `--front-matter PATH`: Override the copyright/usage front-matter fields (edition name, tagline, features, copyright holder, extra copyright lines, data sources) from a JSON file. Unspecified fields fall through to the built-in basic-edition defaults. Used by downstream pro builds to inject their own content without touching lemma templates.
+- `--front-matter PATH`: Override the copyright/usage front-matter fields (edition name, tagline, features, copyright holder, extra copyright lines, data sources) from a JSON file. Unspecified fields fall through to the built-in defaults.
 - `-h, --help`: Show help message
+
+Cross-references, etymology, usage examples, and polytonic lookups are enabled by default - previous builds called these "Pro" features, but lemma now ships a single unified edition with the full feature set.
 
 ## Data Sources
 
@@ -163,20 +161,22 @@ This cross-references the two data sources, uses corpus frequency as a tiebreake
 
 ## Dictionary Content
 
-The dictionaries include:
+The dictionary includes:
 
 - **Headwords**: Main dictionary entries
 - **Inflected Forms**: Automatically redirect to their lemmas
-- **Part of Speech**: Grammatical category
+- **Part of Speech**: Grammatical category, gender, and key forms
 - **Definitions**: Multiple numbered definitions where applicable
-- **Etymology**: Word origins and history (English dictionary only)
+- **Etymology**: Word origins and history
+- **Usage Examples**: Attested example sentences with translations
+- **Cross-References**: Clickable links between related entries
 - **Domain Tags**: Subject area indicators (e.g., γλωσσολογία, γραμματική)
 
 ### Inflection Limit
 
 Each headword includes up to 255 unique inflected forms (`MAX_INFLECTIONS` in `src/html_gen.rs`), ranked by corpus frequency when pre-ranked forms from Dilemma are available. Use `-i N` to adjust.
 
-Pro builds also include up to 255 polytonic variants per headword (`MAX_POLYTONIC`), sourced from attested forms in Greek Wikisource via Dilemma's `mg_polytonic_ranked.json`. This enables lookups in polytonic Modern Greek texts (pre-1982 orthography, Katharevousa literature, etc.).
+Each headword also carries up to 255 polytonic variants (`MAX_POLYTONIC`), sourced from attested forms in Greek Wikisource via Dilemma's `mg_polytonic_ranked.json`. This enables lookups in polytonic Modern Greek texts (pre-1982 orthography, Katharevousa literature, etc.).
 
 ### Excluded Content
 
@@ -205,6 +205,12 @@ The following are filtered out as they cannot be selected in Kindle texts:
 - **Kindling not found**: Only needed for `.mobi` generation (`-m` flag). Download from [Kindling releases](https://github.com/ciscoriordan/kindling/releases)
 - **Download freezes**: Use pre-downloaded data files from the repository
 - **Memory issues**: Use the `-l` option to build smaller test dictionaries first
+
+## Dictionary Layout
+
+Dictionary content is split across per-letter `content_NN.html` files (`content_01.html` … `content_24.html` for Α…Ω, plus `content_00.html` for non-Greek headwords). Each file is a standalone XHTML document with the Kindle dictionary `<idx:*>` markup. Cross-reference links are file-qualified (`content_11.html#hw_λέγω`). The NCX also exposes a jump-to-letter TOC.
+
+Per-letter splitting is required by [Kindle Publishing Guidelines §15.5](https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf) - Amazon's server-side dictionary converter can time out on a single very large XHTML file. Kindling reads every spine entry and produces a single MOBI, so the MOBI output is still one file per edition.
 
 ## Git Hooks
 

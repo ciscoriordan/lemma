@@ -26,9 +26,9 @@ elif [ -x "$HOME/Documents/kindling/target/release/kindling-cli" ]; then
 fi
 
 # Collect staged files under lemma_greek_*/ directories. The case glob
-# matches both the bare `lemma_greek_en/` pro build dir and any tagged
-# variant like `lemma_greek_en_basic/`. Use -z to survive filenames with
-# spaces.
+# matches the single `lemma_greek_en/` build dir (and any test-limited
+# variant like `lemma_greek_en_0.05pct/`). Use -z to survive filenames
+# with spaces.
 staged_dirs=()
 while IFS= read -r -d '' path; do
     case "$path" in
